@@ -42,13 +42,29 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         # Only the version built from main is worth publishing; pull requests
         # build to prove they can, and stop there.
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PAGES_ENABLED == 'true'
         with:
           path: site
 
+  # ---------------------------------------------------------------------------
+  # Publishing is gated on a repository variable, and off by default.
+  # ---------------------------------------------------------------------------
+  # GitHub Pages is not available for a PRIVATE repository on a Free plan, so
+  # while this repository is private the publish step can only fail — turning
+  # every push red for a reason nobody can act on. The build job above is the
+  # part that carries the value anyway: it is what catches a broken link or a
+  # page missing from the navigation.
+  #
+  # Pages becomes available, free, the moment the repository is public. Enable
+  # it then, in one step:
+  #
+  #     gh api -X POST repos/OWNER/REPO/pages -f build_type=workflow
+  #     gh variable set PAGES_ENABLED --body true
+  #
+  # This is on the go-public checklist in the README.
   publish:
     name: publish
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.PAGES_ENABLED == 'true'
     needs: build
     runs-on: ubuntu-latest
     permissions:
