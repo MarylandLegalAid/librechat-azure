@@ -114,6 +114,18 @@ secret_count=0
 while IFS= read -r secret_name; do
   [ -n "$secret_name" ] || continue
 
+  # Secrets named BOOTSTRAP-* belong to the host, not to the application, and
+  # are deliberately kept out of .env — nothing in a container should be able to
+  # read them. The git deploy key used to clone a private repository is the
+  # example: it is consumed once by librechat-bootstrap.sh and has no business
+  # being in the environment of the chat application.
+  case "$secret_name" in
+    BOOTSTRAP-*)
+      log "skipping $secret_name (host-only secret)"
+      continue
+      ;;
+  esac
+
   value="$(az keyvault secret show \
              --vault-name "$VAULT_NAME" \
              --name "$secret_name" \

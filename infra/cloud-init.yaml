@@ -41,17 +41,83 @@ write_files:
   - path: /etc/librechat-deploy.conf
     permissions: '0644'
     content: |
-      # Read by scripts/deploy.sh and scripts/render-env.sh.
-      # Written once by cloud-init; safe to edit if the vault is ever renamed.
+      # Read by scripts/deploy.sh, scripts/render-env.sh and the bootstrap
+      # script. Written once by cloud-init; safe to edit if the vault is ever
+      # renamed or the repository moves.
       KV_NAME=__KEY_VAULT_NAME__
       DEPLOY_BRANCH=__REPO_BRANCH__
+      REPO_URL=__REPO_URL__
+
+  # ---------------------------------------------------------------------------
+  # Bootstrap: get the repository onto this machine.
+  # ---------------------------------------------------------------------------
+  # Separate from deploy.sh because deploy.sh lives INSIDE the repository and so
+  # cannot be the thing that fetches it.
+  #
+  # Re-runnable, and expected to be re-run. cloud-init calls it once at first
+  # boot, which may well be before the key vault has been seeded — the vault is
+  # created by the same deployment as this machine, so at first boot it is
+  # usually still empty. A failure here is not a problem; run it again once your
+  # secrets exist:
+  #
+  #     sudo /usr/local/sbin/librechat-bootstrap.sh
+  - path: /usr/local/sbin/librechat-bootstrap.sh
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      . /etc/librechat-deploy.conf
+
+      echo "[bootstrap] repository: $REPO_URL ($DEPLOY_BRANCH)"
+
+      az account show >/dev/null 2>&1 || \
+        az login --identity --allow-no-subscriptions --output none
+
+      # --- A read-only deploy key, if this repository is private -------------
+      # A public repository needs no credential at all, which is the whole point
+      # of publishing it — a grantee's machine clones with nothing configured.
+      # While the repository is still private, a read-only deploy key bridges
+      # the gap. It is stored base64-encoded because a .env-style secret cannot
+      # hold a multi-line value, and it is named BOOTSTRAP-* so render-env.sh
+      # keeps it out of the application's environment entirely.
+      #
+      # When the repository becomes public: delete the secret, delete the deploy
+      # key on GitHub, and change REPO_URL here to the https:// form.
+      if key_b64=$(az keyvault secret show --vault-name "$KV_NAME" \
+                     --name BOOTSTRAP-GIT-DEPLOY-KEY --query value -o tsv 2>/dev/null); then
+        echo "[bootstrap] installing the read-only deploy key"
+        install -d -m 0700 /root/.ssh
+        printf '%s' "$key_b64" | base64 -d > /root/.ssh/id_ed25519
+        chmod 0600 /root/.ssh/id_ed25519
+        ssh-keyscan -t rsa,ecdsa,ed25519 github.com > /root/.ssh/known_hosts 2>/dev/null
+        chmod 0644 /root/.ssh/known_hosts
+      else
+        echo "[bootstrap] no deploy key in the vault — assuming a public repository"
+      fi
+
+      # --- Clone, or leave an existing checkout alone ------------------------
+      if [ -d /srv/librechat/app/.git ]; then
+        echo "[bootstrap] already cloned; leaving it to deploy.sh"
+      else
+        mkdir -p /srv/librechat
+        git clone --branch "$DEPLOY_BRANCH" --depth 1 "$REPO_URL" /srv/librechat/app
+        echo "[bootstrap] cloned"
+      fi
+
+      git config --global --add safe.directory /srv/librechat/app
+      chmod +x /srv/librechat/app/scripts/*.sh
+
+      echo "[bootstrap] done — next: /srv/librechat/app/scripts/deploy.sh --force"
 
   # ---------------------------------------------------------------------------
   # The deploy timer — the entire autodeploy configuration.
   # ---------------------------------------------------------------------------
-  # Because the repository is public, `git pull` needs no credentials at all.
-  # There is nothing to configure, rotate, or leak. A run where nothing has
-  # changed costs one HTTPS request, which is what makes five minutes reasonable.
+  # Once the repository is public, `git pull` needs no credentials at all —
+  # nothing to configure, rotate, or leak. (While it is still private, the
+  # read-only deploy key installed by librechat-bootstrap.sh stands in.) A run
+  # where nothing has changed costs one request, which is what makes a
+  # five-minute interval reasonable.
   - path: /etc/systemd/system/librechat-deploy.service
     permissions: '0644'
     content: |
@@ -224,16 +290,14 @@ runcmd:
   # ===========================================================================
   # 6. The deployment repository.
   # ===========================================================================
-  # A shallow clone: this machine only ever needs the tip of the branch, and
-  # deploy.sh fast-forwards it. Public repository, so no credentials.
-  - |
-    set -eux
-    mkdir -p /srv/librechat
-    if [ ! -d /srv/librechat/app/.git ]; then
-      git clone --branch __REPO_BRANCH__ --depth 1 __REPO_URL__ /srv/librechat/app
-    fi
-    git config --global --add safe.directory /srv/librechat/app
-    chmod +x /srv/librechat/app/scripts/*.sh
+  # Attempted once, and allowed to fail. The key vault is created by the same
+  # deployment as this machine, so at first boot it is usually still empty — and
+  # a private repository needs a deploy key from it. Re-run after seeding:
+  #
+  #     sudo /usr/local/sbin/librechat-bootstrap.sh
+  #
+  # For a public repository this succeeds first time and there is nothing to do.
+  - /usr/local/sbin/librechat-bootstrap.sh || echo "bootstrap deferred — re-run it once the key vault is seeded"
 
   # ===========================================================================
   # 7. Timers.
@@ -259,7 +323,10 @@ final_message: |
     1. Put your secrets in the key vault named in /etc/librechat-deploy.conf
        (see .env.example for the catalogue and the dash-to-underscore rule).
     2. Point DNS at this machine's public address.
-    3. sudo /srv/librechat/app/scripts/deploy.sh --force
+    3. sudo /usr/local/sbin/librechat-bootstrap.sh
+       (fetches the repository; harmless to re-run, and usually necessary
+        because the vault was still empty when this machine first booted)
+    4. sudo /srv/librechat/app/scripts/deploy.sh --force
 
   Then the five-minute timer keeps it up to date on its own.
   ==========================================================================
