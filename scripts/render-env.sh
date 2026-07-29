@@ -26,6 +26,14 @@ ENV_FILE="$REPO_ROOT/.env"
 # The vault name comes from /etc/librechat-deploy.conf, which cloud-init writes
 # at provisioning time. It is the one piece of per-machine configuration that
 # cannot itself come from the vault.
+#
+# Read here rather than relying on the caller to pass it down. deploy.sh also
+# sources this file, but a variable it merely sources is not exported, so a
+# child process sees nothing — which is exactly how this failed the first time.
+CONFIG_FILE="${CONFIG_FILE:-/etc/librechat-deploy.conf}"
+# shellcheck disable=SC1090
+[ -f "$CONFIG_FILE" ] && . "$CONFIG_FILE"
+
 VAULT_NAME="${KV_NAME:-}"
 
 while [ $# -gt 0 ]; do

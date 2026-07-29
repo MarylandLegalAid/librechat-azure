@@ -56,6 +56,13 @@ fail() { echo "[deploy] ERROR: $*" >&2; }
 # optionally DEPLOY_BRANCH. Everything else comes from git or the vault.
 # shellcheck disable=SC1090
 [ -f "$CONFIG_FILE" ] && . "$CONFIG_FILE"
+# Exported, not merely set: render-env.sh and backup-mongo.sh are separate
+# processes and inherit only the environment. (They also read this file
+# themselves now, but relying on one mechanism to work by accident is how the
+# first real deploy failed.)
+export KV_NAME="${KV_NAME:-}"
+export DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+export REPO_URL="${REPO_URL:-}"
 
 
 # -----------------------------------------------------------------------------
@@ -119,8 +126,20 @@ env_value() {
 # and once more against the previous commit if the health check fails.
 bring_up_stack() {
   # --- 4. Rebuild .env from Key Vault --------------------------------------
+  #
+  # Checked explicitly rather than left to `set -e`. This function is invoked as
+  # `if ! bring_up_stack`, and POSIX shells disable errexit for a command used
+  # as a condition — so every failure inside here is silent unless it is tested.
+  # Without this check, a secrets failure fell straight through to `docker
+  # compose up` with no .env at all, and the first error a human saw was an
+  # unrelated complaint about an unset variable.
   log "rendering .env from Key Vault"
-  "$REPO_ROOT/scripts/render-env.sh"
+  if ! "$REPO_ROOT/scripts/render-env.sh"; then
+    fail "could not render .env from Key Vault — not starting anything."
+    fail "Check that KV_NAME in $CONFIG_FILE names a real vault, and that this"
+    fail "machine's managed identity holds 'Key Vault Secrets User' on it."
+    return 1
+  fi
 
   local file_storage data_dir compose_profiles
   file_storage="$(env_value FILE_STORAGE)"
@@ -158,8 +177,11 @@ bring_up_stack() {
   # baked in here, before the application ever reads the file.
   # config/storage/README.md explains this at length.
   log "merging librechat.yaml with $storage_config"
-  yq eval-all '. as $item ireduce ({}; . * $item)' \
-    librechat.yaml "$storage_config" > librechat.runtime.yaml
+  if ! yq eval-all '. as $item ireduce ({}; . * $item)' \
+       librechat.yaml "$storage_config" > librechat.runtime.yaml; then
+    fail "failed to merge librechat.yaml with $storage_config"
+    return 1
+  fi
 
   # --- 6 & 7. Pull and start ------------------------------------------------
   local -a compose_args=(-f compose.yaml -f "$storage_compose")
@@ -173,10 +195,16 @@ bring_up_stack() {
   fi
 
   log "pulling images"
-  docker compose "${compose_args[@]}" pull --quiet
+  if ! docker compose "${compose_args[@]}" pull --quiet; then
+    fail "failed to pull one or more images"
+    return 1
+  fi
 
   log "starting containers"
-  docker compose "${compose_args[@]}" up -d --remove-orphans
+  if ! docker compose "${compose_args[@]}" up -d --remove-orphans; then
+    fail "failed to start containers"
+    return 1
+  fi
 }
 
 # Poll the application's own health endpoint. Container "running" is not the
