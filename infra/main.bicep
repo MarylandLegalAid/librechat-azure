@@ -79,7 +79,7 @@ param repoBranch string = 'main'
 @description('Create daily whole-machine backups with 30-day retention. The only thing that restores uploaded files.')
 param enableBackup bool = true
 
-@description('Public URL of the health endpoint to monitor, e.g. https://chat.example.org/api/health. Leave empty until DNS points at this machine; the availability test is skipped while it is empty.')
+@description('Public URL of the health endpoint to monitor, e.g. https://chat.example.org/health. Leave empty until DNS points at this machine; the availability test is skipped while it is empty.')
 param healthCheckUrl string = ''
 
 @description('Run the five-minute deploy timer on this machine. Set false where deploys are triggered by a pipeline instead, so a timer run cannot race it.')

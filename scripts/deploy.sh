@@ -38,7 +38,10 @@ cd "$REPO_ROOT"
 LOCK_FILE="/var/lock/librechat-deploy.lock"
 CONFIG_FILE="/etc/librechat-deploy.conf"
 BRANCH="${DEPLOY_BRANCH:-main}"
-HEALTH_URL="http://127.0.0.1:3080/api/health"
+# /health, not /healthz — the latter returns 200 with the frontend's HTML from
+# the catch-all route, so it passes even when the API is down. /api/health does
+# not exist at all. Verified by probing v0.8.7 directly.
+HEALTH_URL="http://127.0.0.1:3080/health"
 HEALTH_TIMEOUT_SECONDS=120
 
 FORCE=false

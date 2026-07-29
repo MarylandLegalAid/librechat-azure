@@ -211,4 +211,4 @@ decision, before the window rather than during it.
 - [ ] Each MCP tool server responds
 - [ ] Admin panel loads, an admin can list users, **and a non-admin is refused**
 - [ ] Run Code executes, if you have a code interpreter
-- [ ] `/api/health` returns healthy and the availability alert is green
+- [ ] `/health` returns healthy and the availability alert is green

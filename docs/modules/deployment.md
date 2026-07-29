@@ -24,7 +24,7 @@ only one party uses is a mechanism only one party finds the bugs in.
 5. Merges `librechat.yaml` with the storage overlay into `librechat.runtime.yaml`.
 6. Pulls images.
 7. Starts containers.
-8. Polls `/api/health` for up to two minutes.
+8. Polls `/health` for up to two minutes.
 9. **If that fails**: rolls back to the previous commit, starts it again, and exits
    non-zero.
 

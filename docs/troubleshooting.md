@@ -7,7 +7,7 @@ likely to meet them.
 
 ```bash
 # is the application answering
-curl -fsS https://chat.yourorg.org/api/health
+curl -fsS https://chat.yourorg.org/health
 
 # what is running
 az vm run-command invoke -g rg-librechat-prod -n vm-librechat-prod \

@@ -118,7 +118,17 @@ services:
       rag_api:
         condition: service_started
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # /health — NOT /healthz, and NOT /api/health.
+      #
+      # /api/health does not exist and returns 404.
+      #
+      # /healthz is worse than useless: it returns 200 with the single-page
+      # app's HTML, because it falls through to the frontend catch-all route.
+      # A health check pointed at it passes while the API is completely broken,
+      # which is the exact failure this check exists to notice.
+      #
+      # Verified against v0.8.7 by probing the running container.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       start_period: 120s

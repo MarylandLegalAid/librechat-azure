@@ -76,7 +76,7 @@
         "Leave it as an empty string for the first deployment, then set it and",
         "redeploy the template. Nothing else needs to change.",
         "",
-        "  https://chat.example.org/api/health"
+        "  https://chat.example.org/health"
       ],
       "value": ""
     },
