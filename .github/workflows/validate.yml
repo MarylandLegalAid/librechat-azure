@@ -100,6 +100,50 @@ jobs:
           # warnings are worth seeing but should not block a deployment fix.
           shellcheck --severity=error scripts/*.sh
 
+      # The scripts embedded in cloud-init.yaml are shell too, and they are the
+      # hardest ones to test — a mistake there does not surface until a machine
+      # boots, and it surfaces as "nothing works" rather than as an error. So
+      # extract them from the YAML and check them like any other script.
+      #
+      # This exists because a real first boot came up with no Docker, no
+      # checkout and disabled timers, from a brace expansion that is valid bash
+      # and silently wrong under dash.
+      - name: Check the scripts embedded in cloud-init
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 - <<'PY'
+          import yaml, subprocess, tempfile, os, sys
+          doc = yaml.safe_load(open('infra/cloud-init.yaml'))
+          failed = False
+          for entry in doc.get('write_files', []):
+              if not entry['path'].endswith('.sh'):
+                  continue
+              body = entry['content']
+              # Bicep substitutes these at deployment time; give them plausible
+              # values so the script is syntactically complete.
+              for ph, val in [
+                  ('__DATA_DIR__', '/srv/librechat/data'),
+                  ('__DEPLOY_TIMER_ENABLED__', 'true'),
+                  ('__KEY_VAULT_NAME__', 'kv-example'),
+                  ('__REPO_URL__', 'https://example.org/repo.git'),
+                  ('__REPO_BRANCH__', 'main'),
+              ]:
+                  body = body.replace(ph, val)
+              with tempfile.NamedTemporaryFile('w', suffix='.sh', delete=False) as fh:
+                  fh.write(body)
+                  tmp = fh.name
+              for cmd in (['bash', '-n', tmp], ['shellcheck', '--severity=error', tmp]):
+                  res = subprocess.run(cmd, capture_output=True, text=True)
+                  if res.returncode:
+                      print(f"  FAIL {entry['path']} ({cmd[0]})")
+                      print(res.stdout or res.stderr)
+                      failed = True
+              else:
+                  print(f"  ok   {entry['path']}")
+              os.unlink(tmp)
+          sys.exit(1 if failed else 0)
+          PY
+
   yaml:
     name: yaml
     runs-on: ubuntu-latest
