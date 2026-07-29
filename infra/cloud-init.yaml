@@ -31,6 +31,7 @@ packages:
   - git
   - jq
   - util-linux      # flock, mountpoint — both used by deploy.sh
+  - psmisc          # fuser — used to wait out cloud-init's own apt run
   - unattended-upgrades
 
 write_files:
@@ -47,6 +48,149 @@ write_files:
       KV_NAME=__KEY_VAULT_NAME__
       DEPLOY_BRANCH=__REPO_BRANCH__
       REPO_URL=__REPO_URL__
+
+  # ---------------------------------------------------------------------------
+  # Host setup: everything that has to happen once, on first boot.
+  # ---------------------------------------------------------------------------
+  # Idempotent and safe to re-run. If first boot half-failed, fix the cause and
+  # run it again rather than rebuilding the machine:
+  #
+  #     sudo /usr/local/sbin/librechat-host-setup.sh
+  - path: /usr/local/sbin/librechat-host-setup.sh
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      log() { echo "[host-setup] $*"; }
+
+      # cloud-init's own package_update/package_upgrade runs in parallel with
+      # this script and holds the dpkg lock, so every apt call here has to be
+      # prepared to wait for it. Without this, Docker and the Azure CLI fail to
+      # install with "Unable to acquire the dpkg frontend lock" and the machine
+      # comes up looking fine but unable to run anything.
+      APT="apt-get -o DPkg::Lock::Timeout=900 -qq"
+      export DEBIAN_FRONTEND=noninteractive
+
+      log "waiting for any in-flight package operation to finish"
+      for _ in $(seq 1 120); do
+        fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+        sleep 5
+      done
+
+      # --- Docker, from Docker's own repository --------------------------
+      # Not Ubuntu's docker.io, which lags well behind and does not ship the
+      # Compose v2 plugin this deployment uses.
+      if ! command -v docker >/dev/null 2>&1; then
+        log "installing Docker"
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+          > /etc/apt/sources.list.d/docker.list
+        $APT update
+        $APT install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      fi
+      systemctl enable --now docker
+      docker --version
+      docker compose version
+
+      # --- Azure CLI, for reading secrets as this machine's own identity --
+      if ! command -v az >/dev/null 2>&1; then
+        log "installing the Azure CLI"
+        curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
+        chmod a+r /etc/apt/keyrings/microsoft.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+          > /etc/apt/sources.list.d/azure-cli.list
+        $APT update
+        $APT install -y azure-cli
+      fi
+      az version --output tsv | head -1
+
+      # --- yq, for merging the storage overlay into librechat.yaml --------
+      # Ubuntu's `yq` package is a different program with incompatible syntax.
+      # scripts/deploy.sh is written against mikefarah/yq.
+      if ! command -v yq >/dev/null 2>&1; then
+        log "installing yq"
+        curl -fsSL -o /usr/local/bin/yq \
+          "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64"
+        chmod 0755 /usr/local/bin/yq
+      fi
+      yq --version
+
+      # --- The data disk --------------------------------------------------
+      # Everything that must outlive the operating system lives here.
+      #
+      # Mounted by UUID, never by device name: device names are assigned in
+      # whatever order the kernel enumerates disks, so /dev/sdc can become
+      # /dev/sdd after a resize or a reboot, and the machine then boots with
+      # the wrong filesystem mounted or none at all.
+      DEVICE=/dev/disk/azure/scsi1/lun0
+      MOUNT=__DATA_DIR__
+
+      log "preparing the data disk"
+      for _ in $(seq 1 30); do [ -e "$DEVICE" ] && break; sleep 2; done
+      if [ ! -e "$DEVICE" ]; then
+        echo "[host-setup] ERROR: data disk never appeared at $DEVICE" >&2
+        exit 1
+      fi
+
+      # Format ONLY if there is no filesystem. This is what makes reattaching
+      # an existing data disk to a rebuilt machine safe rather than a disaster.
+      if ! blkid "$DEVICE" >/dev/null 2>&1; then
+        log "no filesystem found; creating one"
+        mkfs.ext4 -L librechat-data "$DEVICE"
+      fi
+
+      UUID=$(blkid -s UUID -o value "$DEVICE")
+      mkdir -p "$MOUNT"
+      grep -q "$UUID" /etc/fstab || \
+        echo "UUID=$UUID $MOUNT ext4 defaults,nofail,discard 0 2" >> /etc/fstab
+      mount -a
+      mountpoint -q "$MOUNT"
+      log "data disk mounted at $MOUNT"
+
+      # --- Directories on the data disk -----------------------------------
+      # Listed one per line rather than with brace expansion. Braces are a
+      # bashism, and this script having a bash shebang is not a good enough
+      # reason to rely on one where an explicit list reads just as well.
+      #
+      # The database images start as root and chown their own data directories,
+      # so those need no ownership setup. The LibreChat container does not — it
+      # runs as uid 1000 and fails to write uploads into a root-owned directory
+      # with an EACCES buried in its logs and no other symptom.
+      log "creating directories"
+      for d in mongo meili_data_v1.35.1 pgvector uploads images logs skill \
+               letterheads caddy/data caddy/config backups migrations; do
+        mkdir -p "$MOUNT/$d"
+      done
+      chown -R 1000:1000 "$MOUNT/uploads" "$MOUNT/images" "$MOUNT/logs" "$MOUNT/skill"
+      chmod 0755 "$MOUNT/letterheads"
+
+      # --- The repository --------------------------------------------------
+      # Allowed to fail: the key vault is created by the same deployment as
+      # this machine, so at first boot it may still be empty, and a private
+      # repository needs a deploy key from it. Re-run the bootstrap after
+      # seeding. For a public repository this succeeds first time.
+      log "fetching the repository"
+      /usr/local/sbin/librechat-bootstrap.sh || \
+        log "bootstrap deferred — re-run it once the key vault is seeded"
+
+      # --- Timers ----------------------------------------------------------
+      # Enabled, not started. Nothing deploys until a human runs the first
+      # deploy by hand, once the vault has been seeded.
+      log "enabling timers"
+      systemctl daemon-reload
+      systemctl enable librechat-backup.timer
+      if [ "__DEPLOY_TIMER_ENABLED__" = "true" ]; then
+        systemctl enable librechat-deploy.timer
+        log "deploy timer enabled; it begins after the first manual deploy"
+      else
+        systemctl disable librechat-deploy.timer || true
+        log "deploy timer disabled — deploys are expected from a pipeline"
+      fi
+
+      log "done"
 
   # ---------------------------------------------------------------------------
   # Bootstrap: get the repository onto this machine.
@@ -203,117 +347,21 @@ write_files:
       Unattended-Upgrade::Remove-Unused-Dependencies "true";
 
 runcmd:
-  # ===========================================================================
-  # 1. Docker, from Docker's own repository.
-  # ===========================================================================
-  # Not the distribution package: Ubuntu's docker.io lags well behind and does
-  # not ship the Compose v2 plugin this deployment uses.
-  - install -m 0755 -d /etc/apt/keyrings
-  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-  - chmod a+r /etc/apt/keyrings/docker.asc
-  - >-
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc]
-      https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable"
-      > /etc/apt/sources.list.d/docker.list
-  - apt-get update
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  - systemctl enable --now docker
-
-  # ===========================================================================
-  # 2. Azure CLI, for reading secrets with the machine's own identity.
-  # ===========================================================================
-  - curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
-  - chmod a+r /etc/apt/keyrings/microsoft.gpg
-  - >-
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/microsoft.gpg]
-      https://packages.microsoft.com/repos/azure-cli/ $(. /etc/os-release && echo "$VERSION_CODENAME") main"
-      > /etc/apt/sources.list.d/azure-cli.list
-  - apt-get update
-  - DEBIAN_FRONTEND=noninteractive apt-get install -y azure-cli
-
-  # ===========================================================================
-  # 3. yq, for merging the storage overlay into librechat.yaml.
-  # ===========================================================================
-  # Ubuntu's `yq` package is a different program with different syntax. This is
-  # mikefarah/yq, which is what scripts/deploy.sh is written against.
-  - curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64"
-  - chmod 0755 /usr/local/bin/yq
-  - /usr/local/bin/yq --version
-
-  # ===========================================================================
-  # 4. The data disk.
-  # ===========================================================================
-  # Everything that must outlive the operating system lives here: databases,
-  # uploaded files, letterheads, certificates, backups.
+  # ONE command. Everything it does lives in the bash script above.
   #
-  # Mounted by UUID, never by device name. Device names are assigned in the
-  # order the kernel happens to enumerate disks, so /dev/sdc can become /dev/sdd
-  # after a resize or a reboot — at which point the machine boots with the wrong
-  # filesystem mounted, or none at all. The UUID belongs to the filesystem and
-  # does not move.
-  - |
-    set -eux
-    DEVICE=/dev/disk/azure/scsi1/lun0
-    MOUNT=__DATA_DIR__
-
-    # Wait for the disk to be attached and visible.
-    for _ in $(seq 1 30); do [ -e "$DEVICE" ] && break; sleep 2; done
-    [ -e "$DEVICE" ] || { echo "data disk never appeared at $DEVICE"; exit 1; }
-
-    # Format only if there is no filesystem. This is what makes reattaching an
-    # existing data disk to a rebuilt machine safe rather than catastrophic.
-    if ! blkid "$DEVICE" >/dev/null 2>&1; then
-      mkfs.ext4 -L librechat-data "$DEVICE"
-    fi
-
-    UUID=$(blkid -s UUID -o value "$DEVICE")
-    mkdir -p "$MOUNT"
-    grep -q "$UUID" /etc/fstab || \
-      echo "UUID=$UUID $MOUNT ext4 defaults,nofail,discard 0 2" >> /etc/fstab
-    mount -a
-    mountpoint -q "$MOUNT"
-
-  # ===========================================================================
-  # 5. Directories on the data disk.
-  # ===========================================================================
-  # The database images start as root and chown their own data directories, so
-  # those need no ownership setup. The LibreChat container does not — it runs as
-  # uid 1000 and will fail to write uploads into a root-owned directory, with an
-  # EACCES buried in its logs and no other symptom.
-  - |
-    set -eux
-    MOUNT=__DATA_DIR__
-    mkdir -p "$MOUNT"/{mongo,meili_data_v1.35.1,pgvector,uploads,images,logs,skill,letterheads,caddy/data,caddy/config,backups,migrations}
-    chown -R 1000:1000 "$MOUNT"/uploads "$MOUNT"/images "$MOUNT"/logs "$MOUNT"/skill
-    chmod 0755 "$MOUNT"/letterheads
-
-  # ===========================================================================
-  # 6. The deployment repository.
-  # ===========================================================================
-  # Attempted once, and allowed to fail. The key vault is created by the same
-  # deployment as this machine, so at first boot it is usually still empty — and
-  # a private repository needs a deploy key from it. Re-run after seeding:
+  # cloud-init concatenates every runcmd entry into a single script and runs it
+  # with /bin/sh — which is dash on Ubuntu, not bash. Two things follow, and
+  # both bit this file before it was written this way:
   #
-  #     sudo /usr/local/sbin/librechat-bootstrap.sh
+  #   - No brace expansion. `mkdir -p /data/{a,b,c}` silently creates ONE
+  #     directory literally named "{a,b,c}", and the failure only surfaces
+  #     later when something tries to use /data/a.
+  #   - `set -e` inside any entry applies to every entry after it, so one
+  #     failing command silently skips the rest of the setup.
   #
-  # For a public repository this succeeds first time and there is nothing to do.
-  - /usr/local/sbin/librechat-bootstrap.sh || echo "bootstrap deferred — re-run it once the key vault is seeded"
-
-  # ===========================================================================
-  # 7. Timers.
-  # ===========================================================================
-  # Enabled but not started. Nothing deploys until a human runs the first deploy
-  # by hand, once the key vault has been seeded.
-  - systemctl daemon-reload
-  - systemctl enable librechat-backup.timer
-  - |
-    if [ "__DEPLOY_TIMER_ENABLED__" = "true" ]; then
-      systemctl enable librechat-deploy.timer
-      echo "deploy timer enabled; it will begin after the first manual deploy"
-    else
-      systemctl disable librechat-deploy.timer || true
-      echo "deploy timer disabled — deploys are expected to come from a pipeline"
-    fi
+  # Calling a single script with its own shebang avoids both, and has the
+  # bonus that it can be re-run by hand after a partial failure.
+  - /usr/local/sbin/librechat-host-setup.sh
 
 final_message: |
   ==========================================================================
