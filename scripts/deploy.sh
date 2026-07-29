@@ -45,9 +45,13 @@ HEALTH_URL="http://127.0.0.1:3080/health"
 HEALTH_TIMEOUT_SECONDS=120
 
 FORCE=false
+REEXECED=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --force) FORCE=true; shift ;;
+    # Internal. Set when this script has already re-executed itself after
+    # updating, so it cannot do so twice.
+    --reexeced) REEXECED=true; shift ;;
     *) echo "deploy.sh: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -109,6 +113,28 @@ if [ "$CURRENT_SHA" != "$PREVIOUS_SHA" ]; then
   log "updating ${PREVIOUS_SHA:0:12} -> ${CURRENT_SHA:0:12}"
 else
   log "forced redeploy of ${CURRENT_SHA:0:12}"
+fi
+
+
+# -----------------------------------------------------------------------------
+# 3b. If this script itself just changed, run the NEW one.
+# -----------------------------------------------------------------------------
+# Step 3 rewrote the working tree, including possibly this file — while this
+# file is being executed. Two things follow, and the first one is subtle enough
+# to have already caused a confusing failure:
+#
+#   - The running process keeps the OLD logic. A fix to deploy.sh appears not to
+#     work, then works on the next run, which is a maddening thing to debug.
+#   - Worse, bash reads a script incrementally by byte offset. A file that
+#     changes length underneath it can leave the interpreter reading from the
+#     wrong position and executing fragments of lines.
+#
+# Re-executing closes both. The lock on file descriptor 9 survives exec, so
+# this does not deadlock against itself, and --reexeced stops it recursing.
+if [ "$REEXECED" = false ] && [ "$CURRENT_SHA" != "$PREVIOUS_SHA" ] \
+   && ! git diff --quiet "$PREVIOUS_SHA" "$CURRENT_SHA" -- scripts/deploy.sh; then
+  log "deploy.sh changed in this update; re-executing the new version"
+  exec "$REPO_ROOT/scripts/deploy.sh" --reexeced $([ "$FORCE" = true ] && echo --force)
 fi
 
 
