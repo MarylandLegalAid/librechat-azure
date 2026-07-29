@@ -131,10 +131,6 @@ var webTestName = 'webtest-${namePrefix}-${environment}-health'
 var backupStorageName = toLower('st${namePrefix}${environment}${substring(uniqueString(resourceGroup().id), 0, 6)}')
 var backupContainerName = 'mongo-backups'
 
-// Built-in Azure role definition IDs. These are the same in every tenant.
-var keyVaultSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
-var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-
 // -----------------------------------------------------------------------------
 // Networking
 // -----------------------------------------------------------------------------
@@ -457,16 +453,6 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
 
 // The machine may read secret values. It may not list, write, or delete
 // anything else in the vault. This is the whole of its standing access.
-resource keyVaultSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: keyVault
-  name: guid(keyVault.id, vm.id, keyVaultSecretsUserRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUserRoleId)
-    principalId: vm.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 // -----------------------------------------------------------------------------
 // Backup storage (for the nightly database dump)
 // -----------------------------------------------------------------------------
@@ -511,13 +497,19 @@ resource backupContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   }
 }
 
-resource storageBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: backupStorage
-  name: guid(backupStorage.id, vm.id, storageBlobDataContributorRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+// -----------------------------------------------------------------------------
+// What the machine is allowed to do
+// -----------------------------------------------------------------------------
+// In a module because a role assignment's name must be computable before the
+// deployment starts, and it needs to be derived from the VM's principal — which
+// is not known until the VM exists. infra/roles.bicep explains why naming it
+// from vm.id instead is a trap that makes VM recreation unrecoverable.
+module roleAssignments 'roles.bicep' = {
+  name: 'librechat-role-assignments'
+  params: {
     principalId: vm.identity.principalId
-    principalType: 'ServicePrincipal'
+    keyVaultName: keyVault.name
+    backupStorageName: backupStorage.name
   }
 }
 
