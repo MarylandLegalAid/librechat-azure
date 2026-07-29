@@ -1,0 +1,22 @@
+# File storage: local disk. THIS IS THE DEFAULT.
+#
+# Merged over librechat.yaml by scripts/deploy.sh when FILE_STORAGE=disk.
+#
+# Uploads and generated images are written inside the container to /app/uploads
+# and /app/client/public/images, which compose.storage.disk.yml bind-mounts to
+# the Azure data disk at ${DATA_DIR}. They are therefore covered by Azure Backup
+# along with everything else on that disk — which is the whole reason the data
+# disk exists as a separate resource from the OS disk.
+#
+# Why local disk rather than object storage:
+#   - One BAA (Microsoft) instead of two.
+#   - No presigned-URL expiry problem: files are served by the app itself.
+#   - Azure Blob is NOT a viable alternative in v0.8.7 — see
+#     docs/modules/storage-s3-legacy.md for the verified reason.
+#
+# Note for an organization migrating from S3: setting this to "local" changes
+# where NEW files go. Existing file records that carry `source: s3` keep being
+# served from S3 exactly as before, so leave AWS_* set. Nothing is copied and
+# nothing is rewritten.
+
+fileStrategy: "local"

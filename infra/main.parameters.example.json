@@ -1,0 +1,167 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+
+  "_readme": [
+    "Copy this to main.parameters.json and fill in the four starred values below.",
+    "main.parameters.json is gitignored — it names your machine and your admin",
+    "addresses, which is not information a public repository should carry.",
+    "",
+    "  cp infra/main.parameters.example.json infra/main.parameters.json",
+    "  $EDITOR infra/main.parameters.json",
+    "",
+    "  az group create --name rg-librechat-prod --location eastus2",
+    "  az deployment group create \\",
+    "    --resource-group rg-librechat-prod \\",
+    "    --template-file infra/main.bicep \\",
+    "    --parameters @infra/main.parameters.json",
+    "",
+    "Every other parameter has a working default. See the @description on each",
+    "one in main.bicep for what it does before you change it."
+  ],
+
+  "parameters": {
+
+    "adminSshPublicKey": {
+      "_comment": [
+        "★ REQUIRED. The PUBLIC half of an SSH key pair — the contents of a .pub",
+        "file, starting with 'ssh-ed25519' or 'ssh-rsa'. Never the private half.",
+        "",
+        "  ssh-keygen -t ed25519 -f ~/.ssh/librechat -C librechat-admin",
+        "  cat ~/.ssh/librechat.pub",
+        "",
+        "This is the break-glass account. Day to day, sign in with your Entra ID",
+        "identity instead — `az ssh vm -g <rg> -n <vm>` — which needs no key file",
+        "and can be revoked centrally. This key is what gets you back in when",
+        "that path is broken."
+      ],
+      "value": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAM you@example.org"
+    },
+
+    "adminSourceAddressPrefixes": {
+      "_comment": [
+        "★ REQUIRED. The only addresses allowed to reach SSH. Everything else is",
+        "refused by the network firewall before it reaches the machine.",
+        "",
+        "  curl -fsS https://api.ipify.org",
+        "",
+        "⚠️  Home broadband addresses change without warning, and when yours does",
+        "you are locked out. That is recoverable and takes about a minute — Azure",
+        "Portal > nsg-librechat-prod > allow-ssh-admin > edit the source. Read",
+        "docs/troubleshooting.md#locked-out-of-ssh now rather than while it is",
+        "happening.",
+        "",
+        "Listing an office range and your home address is reasonable. Listing",
+        "0.0.0.0/0 defeats the purpose of the rule."
+      ],
+      "value": ["203.0.113.4/32"]
+    },
+
+    "alertEmail": {
+      "_comment": [
+        "★ REQUIRED. Where every monitoring alert is sent, including the one that",
+        "fires when the site is down. A shared mailbox someone reads beats an",
+        "individual's address that goes quiet during annual leave."
+      ],
+      "value": "it-alerts@example.org"
+    },
+
+    "healthCheckUrl": {
+      "_comment": [
+        "★ Set this once DNS points at the machine. It is the check that notices",
+        "the application is broken while the machine itself looks perfectly",
+        "healthy — a crash-looping container uses no CPU and no memory, and every",
+        "other alert stays green through it.",
+        "",
+        "Leave it as an empty string for the first deployment, then set it and",
+        "redeploy the template. Nothing else needs to change.",
+        "",
+        "  https://chat.example.org/api/health"
+      ],
+      "value": ""
+    },
+
+    "namePrefix": {
+      "_comment": [
+        "Names every resource: vm-librechat-prod, kv-librechat-prod, and so on.",
+        "3 to 11 characters."
+      ],
+      "value": "librechat"
+    },
+
+    "location": {
+      "_comment": [
+        "Pick the region closest to your users. If you are subject to data",
+        "residency requirements, this is the parameter that satisfies them.",
+        "",
+        "  az account list-locations --query \"[].name\" -o tsv"
+      ],
+      "value": "eastus2"
+    },
+
+    "availabilityZone": {
+      "_comment": [
+        "The VM, its public address and its data disk must all be in the same",
+        "zone or they cannot be attached to each other. Not every region offers",
+        "every zone."
+      ],
+      "value": "2"
+    },
+
+    "vmSize": {
+      "_comment": [
+        "4 vCPU / 16 GB runs the whole stack comfortably for a few hundred users.",
+        "Standard_D2s_v3 (2/8) works for a small pilot and costs about half.",
+        "docs/cost-model.md has real numbers.",
+        "",
+        "Resizing later is a reboot, not a rebuild — the data disk is a separate",
+        "resource and comes with you."
+      ],
+      "value": "Standard_D4s_v5"
+    },
+
+    "dataDiskSizeGb": {
+      "_comment": [
+        "Databases, uploaded files, letterheads and local backups all live here.",
+        "128 GB is generous for a few hundred users. Growing a disk later is easy;",
+        "shrinking one is not, so do not oversize speculatively."
+      ],
+      "value": 128
+    },
+
+    "adminUsername": {
+      "_comment": "Local administrator account on the virtual machine.",
+      "value": "azureuser"
+    },
+
+    "repoUrl": {
+      "_comment": [
+        "The repository this machine deploys from. Change it to your fork if you",
+        "have one. It must be PUBLIC — the machine has no git credentials, and",
+        "that is deliberate: it is the reason autodeploy needs no configuration."
+      ],
+      "value": "https://github.com/MarylandLegalAid/librechat-azure.git"
+    },
+
+    "enableBackup": {
+      "_comment": [
+        "Daily whole-machine backup with 30-day retention. This is the only thing",
+        "that restores uploaded files. Turn it off only if you have deliberately",
+        "arranged something else."
+      ],
+      "value": true
+    },
+
+    "enableDeployTimer": {
+      "_comment": [
+        "The five-minute timer that pulls and deploys new commits. Leave it true",
+        "for a zero-configuration setup.",
+        "",
+        "Set false where a pipeline triggers deploys instead, so that a timer run",
+        "cannot race a pipeline run. Maryland Legal Aid sets false and deploys",
+        "through GitHub Actions."
+      ],
+      "value": true
+    }
+  }
+}

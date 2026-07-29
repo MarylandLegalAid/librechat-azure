@@ -1,0 +1,21 @@
+# File storage: Amazon S3.
+#
+# Merged over librechat.yaml by scripts/deploy.sh when FILE_STORAGE=s3.
+#
+# This path is NOT what Maryland Legal Aid runs, which is exactly why CI
+# validates it on every pull request (.github/workflows/validate.yml renders
+# both overlays). A configuration nobody exercises rots silently; the mechanical
+# check is the substitute for dogfooding it.
+#
+# Requires AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and
+# AWS_BUCKET_NAME in the environment. With this overlay selected,
+# compose.storage.s3.yml omits the uploads/images bind mounts, because nothing
+# durable is written to the container filesystem.
+#
+# Choose this if you already run an S3 bucket under an appropriate agreement and
+# want files to live there rather than on the VM's data disk. Be aware that it
+# adds a second vendor to your compliance surface, and that LibreChat serves S3
+# files through presigned URLs that expire — see
+# docs/modules/storage-s3-legacy.md.
+
+fileStrategy: "s3"

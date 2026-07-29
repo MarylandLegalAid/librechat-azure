@@ -1,0 +1,73 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "America/New_York",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 3,
+
+  "packageRules": [
+    {
+      "description": "LibreChat itself. Never automerge. Pinning this image to a release tag is the whole reason Renovate is here: the previous deployment tracked a `:latest` tag, drifted onto a pre-release, and stayed several versions behind without anyone deciding to. A pinned tag plus a pull request makes every upgrade a choice somebody made.",
+      "matchPackageNames": ["ghcr.io/danny-avila/librechat"],
+      "automerge": false,
+      "labels": ["dependencies", "librechat-upgrade"],
+      "prBodyNotes": [
+        ":warning: Read https://www.librechat.ai/changelog from the current version forward before merging.",
+        "Diff the new release's own `librechat.example.yaml` against this repository's `librechat.yaml`. Renamed and removed keys are the most common upgrade break and prose changelogs miss them.",
+        "Check whether the `version:` key at the top of `librechat.yaml` changed.",
+        "Check for NEW REQUIRED environment variables. `ADMIN_PANEL_SESSION_SECRET` was one of these in v0.8.7 and the admin panel refuses to start without it.",
+        "Check for one-time database migrations.",
+        "Then follow docs/modules/upgrading.md."
+      ]
+    },
+    {
+      "description": "Supporting services. Grouped so they arrive as one pull request rather than four, and still reviewed by a person.",
+      "matchPackageNames": [
+        "caddy",
+        "pgvector/pgvector",
+        "registry.librechat.ai/danny-avila/librechat-rag-api-dev-lite",
+        "registry.librechat.ai/clickhouse/librechat-admin-panel"
+      ],
+      "groupName": "supporting services",
+      "automerge": false
+    },
+    {
+      "description": "MongoDB and Meilisearch MAJOR versions are disabled deliberately, not forgotten. Both hold state that a major version can refuse to read: a Mongo major needs a documented, tested upgrade path with a restore point ready, and Meilisearch encodes its version in the data directory path, so a bump silently starts with an empty index. Neither belongs in an automated pull request. Minor and patch updates still come through.",
+      "matchPackageNames": ["mongo", "getmeili/meilisearch"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "MongoDB and Meilisearch minor/patch updates. Meilisearch minor bumps still need the data directory path in compose.yaml updated to match, or the index rebuilds from scratch — which is safe, but slow and surprising if unexpected.",
+      "matchPackageNames": ["mongo", "getmeili/meilisearch"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "data stores",
+      "automerge": false,
+      "prBodyNotes": [
+        "For Meilisearch: update the `${DATA_DIR}/meili_data_vX.Y.Z` volume path in compose.yaml to match the new version. The index rebuilds from MongoDB on first start, which is expected and takes a few minutes."
+      ]
+    },
+    {
+      "description": "The MCP tool servers, each published from its own public repository. Pinned to release tags so that what this deployment runs is always a specific reviewed build.",
+      "matchPackageNames": [
+        "ghcr.io/marylandlegalaid/legalserver-mcp",
+        "ghcr.io/marylandlegalaid/letterwriter-mcp"
+      ],
+      "groupName": "MCP tool servers",
+      "automerge": false,
+      "labels": ["dependencies", "mcp-tools"]
+    },
+    {
+      "description": "GitHub Actions used by the workflows. Low risk and high noise, so patch and minor updates merge themselves once CI is green.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    }
+  ],
+
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "schedule": ["at any time"]
+  }
+}

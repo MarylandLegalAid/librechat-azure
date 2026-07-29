@@ -1,0 +1,135 @@
+# Compliance
+
+**Read this before you spend money.** For most organizations this is the hardest part
+of the whole exercise, it is not a technical problem, and it is much worse to discover
+halfway through a deployment than at the start.
+
+!!! warning "Not legal advice"
+    This page describes how the system is built and which questions that raises. It
+    is not legal advice, and reading it creates no relationship of any kind between
+    your organization and Maryland Legal Aid. Your obligations depend on your
+    jurisdiction, your funders, your clients and your own policies. Ask your own
+    counsel.
+
+## Where your data actually goes
+
+Being concrete about this is more useful than any general statement.
+
+| Data | Where it lives | Who else can see it |
+|---|---|---|
+| Conversations, users, agents | MongoDB on your VM | Nobody. It never leaves your subscription. |
+| Uploaded files | The data disk on your VM | Nobody. |
+| Search index | Meilisearch on your VM | Nobody. |
+| Document embeddings | pgvector on your VM | Nobody. |
+| Backups | Your Azure storage and Recovery Services vault | Nobody. |
+| **Prompts and responses** | **Sent to your AI provider** | **Anthropic or OpenAI** |
+| **Web search queries** | **Sent to your search provider** | **Serper, Firecrawl, or Jina** |
+| **Speech-to-text audio** | **Sent to OpenAI** | **OpenAI** |
+| **Generated images** | **Prompt sent to OpenAI** | **OpenAI** |
+| **OCR page images** (if enabled) | **Sent to your OCR provider** | **That provider** |
+
+The last five rows are the ones that matter. Everything else stays inside
+infrastructure you control.
+
+## The two agreements you probably need
+
+### 1. With Microsoft, for Azure
+
+Everything in the top half of that table is covered by whatever agreement you have
+with Microsoft for Azure. If you handle protected health information, that means a
+**Business Associate Agreement**, available under the Microsoft Product Terms for
+most Azure services.
+
+This is why the blueprint is Azure-only and why file storage is on the VM's own disk
+rather than an object store: **one agreement instead of two**. Every additional
+vendor is another negotiation.
+
+### 2. With your AI provider
+
+Prompts and responses go to Anthropic or OpenAI. What you need from them depends on
+what you send.
+
+Both offer enterprise terms including zero-data-retention arrangements and, for
+qualifying customers, a BAA. **The default consumer or developer terms are usually not
+sufficient** for confidential client information — check what your account is actually
+on rather than what you assume.
+
+Get this settled before you deploy. It is a procurement conversation with a lead time,
+not a checkbox.
+
+## Features that leave the boundary
+
+Three of these are switched on in this blueprint by default. Decide about each one.
+
+### Web search — the one that catches people
+
+Web search sends the user's query to a third-party search provider. That provider is
+almost certainly **not** covered by your agreements.
+
+A user researching a case can paste a client's name, an address, or a case detail into
+what looks like an ordinary chat. Nothing about the interface signals that this
+particular message is going somewhere different.
+
+Two things worth doing:
+
+1. **Say so in your terms of service.** The dialogue shipped in this repository's
+   `librechat.yaml` has a section on exactly this. It is worth reading as a model.
+2. **Consider leaving it off.** If nobody has asked for it, the safest configuration
+   is the one where the question does not arise. Unset the provider keys and the
+   feature is unavailable.
+
+### Speech to text
+
+Audio uploads go to OpenAI. If people dictate case notes, that audio is client
+information leaving your infrastructure.
+
+Unset `STT_API_KEY` to disable it.
+
+### OCR in the LegalServer tools
+
+Off by default. Enabling it sends page images of client documents to whichever
+provider you configure. Pick one you already have an agreement with. See
+[LegalServer tools](modules/mcp-legalserver.md#ocr-for-scanned-documents).
+
+## What the platform does to help
+
+- **Users only see their own conversations.** There is no cross-user visibility.
+- **Stored provider API keys are encrypted at rest** with `CREDS_KEY`.
+- **Nothing is published.** Agents can be shared within your organization if you
+  enable the marketplace, and not outside it.
+- **The admin panel is admin-gated** and on its own hostname.
+- **No database GUI ships in this stack.** The previous deployment ran one, published
+  on all interfaces, where the only thing between it and the internet was the absence
+  of a firewall rule.
+- **Every service except the web proxy binds to localhost**, so a loosened firewall
+  rule does not expose a database.
+- **SSH is restricted to named addresses** and can use your identity provider.
+- **Secrets live in Azure Key Vault**, not in files. There is no credential on the
+  machine's disk to find.
+
+## What it does not do
+
+Honestly, because you will be asked:
+
+- **No audit log of who read what.** LibreChat records conversations, not access to
+  them. If you need "who opened this document, and when", this is not that system.
+- **No data loss prevention.** Nothing inspects what users type for client identifiers
+  before it goes to a model.
+- **No retention policy enforcement.** Conversations persist until deleted. If your
+  records policy requires disposal after a period, that is a process you run, not a
+  setting here.
+- **No legal hold.** Related to the above.
+- **The AI can be wrong, confidently.** That is a professional-responsibility question
+  for whoever relies on the output, and it belongs in your terms of service and your
+  training.
+
+## Questions worth answering before you deploy
+
+- [ ] Do we have a BAA or equivalent with Microsoft covering Azure?
+- [ ] What terms is our AI provider account actually on? Zero data retention?
+- [ ] Are we enabling web search? If so, how do users find out what that means?
+- [ ] Are we enabling speech to text?
+- [ ] What do our terms of service say, and has counsel seen them?
+- [ ] Who administers this, and what can they see?
+- [ ] What is our answer when a funder asks where client data goes?
+- [ ] Do our record retention obligations apply to conversations here?

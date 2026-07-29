@@ -1,0 +1,61 @@
+# =============================================================================
+# Build the documentation site and publish it to GitHub Pages.
+# =============================================================================
+# The documentation is the deliverable for grantees, so it is built on every
+# pull request — a broken link or a missing page in the navigation should fail
+# review, not be discovered by somebody trying to follow it.
+#
+# --strict turns MkDocs warnings into errors. That includes references to pages
+# that do not exist, which is by far the most common way documentation rots.
+# =============================================================================
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install MkDocs
+        run: pip install mkdocs-material
+
+      - name: Build
+        run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        # Only the version built from main is worth publishing; pull requests
+        # build to prove they can, and stop there.
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          path: site
+
+  publish:
+    name: publish
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

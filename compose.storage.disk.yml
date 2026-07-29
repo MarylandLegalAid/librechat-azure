@@ -1,0 +1,22 @@
+# Storage overlay: local disk. THIS IS THE DEFAULT.
+#
+# Applied by scripts/deploy.sh when FILE_STORAGE=disk, alongside
+# config/storage/disk.yaml which sets `fileStrategy: local`. The two halves must
+# always agree, which is why one variable selects both.
+#
+#   docker compose -f compose.yaml -f compose.storage.disk.yml up -d
+#
+# Uploaded files and generated images are written to the mounted Azure data disk
+# and are therefore covered by Azure Backup. Nothing is copied anywhere and no
+# object store is involved.
+#
+# The api container runs as the `node` user (uid 1000) and does not chown its
+# own mounts, so infra/cloud-init.yaml creates these two directories owned by
+# 1000:1000 before the stack first starts. If uploads silently fail with EACCES
+# in the api logs, that ownership is the first thing to check.
+
+services:
+  api:
+    volumes:
+      - ${DATA_DIR}/uploads:/app/uploads
+      - ${DATA_DIR}/images:/app/client/public/images

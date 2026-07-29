@@ -1,0 +1,28 @@
+# Storage overlay: Amazon S3.
+#
+# Applied by scripts/deploy.sh when FILE_STORAGE=s3, alongside
+# config/storage/s3.yaml which sets `fileStrategy: s3`.
+#
+#   docker compose -f compose.yaml -f compose.storage.s3.yml up -d
+#
+# Deliberately adds NO volumes. Under this strategy every uploaded file goes
+# straight to the bucket, so a bind mount would accumulate nothing but confusion
+# — an empty directory on the data disk that looks like it should contain your
+# files.
+#
+# This file exists as a declaration of intent rather than for its contents.
+# `docker compose -f compose.yaml` alone would produce the same running stack,
+# but then selecting a storage mode would mean remembering to omit a flag, and
+# deploy.sh could not treat both modes identically.
+#
+# Requires AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and
+# AWS_BUCKET_NAME, all supplied through .env from Key Vault.
+#
+# NOTE — this is not the same thing as keeping AWS credentials set while running
+# FILE_STORAGE=disk. An organization migrating off S3 does exactly that: new
+# files land on the data disk while existing records carrying `source: s3`
+# continue to be served from the bucket. That is the disk overlay, not this one.
+# See docs/modules/storage-s3-legacy.md.
+
+services:
+  api: {}

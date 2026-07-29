@@ -1,0 +1,130 @@
+# =============================================================================
+# Check that the configuration is internally consistent. Blocking.
+# =============================================================================
+# Most of what can go wrong in this repository does not fail at startup. It
+# fails when a user sends a message — a provider name off by one space, a model
+# in the wrong list, an MCP host missing from the SSRF allow list. A deployment
+# that comes up green tells you nothing about any of them.
+#
+# This is also what keeps the S3 storage path working. Maryland Legal Aid runs
+# the disk path, so the disk path is exercised constantly and the S3 path is
+# exercised by nobody. Dogfooding cannot protect a configuration you do not run.
+# A check can.
+# =============================================================================
+
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    name: configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq
+        run: |
+          # mikefarah/yq. Ubuntu's `yq` package is a different program with
+          # incompatible syntax, and scripts/deploy.sh is written against this one.
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Validate configuration
+        run: ./scripts/validate-config.sh
+
+  bicep:
+    name: infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the Bicep template
+        run: az bicep build --file infra/main.bicep --outfile /tmp/main.json
+
+      - name: Check the committed ARM template is in sync
+        run: |
+          set -euo pipefail
+          # infra/main.json is what the "Deploy to Azure" button in the README
+          # actually deploys. If it lags behind main.bicep, the portal quietly
+          # provisions an older shape of the infrastructure and nothing warns
+          # anyone. The generator's own version and hash are stripped so that an
+          # Azure CLI upgrade does not read as a source change.
+          strip() { jq -S 'del(.metadata._generator.version, .metadata._generator.templateHash)' "$1"; }
+          if ! diff -u <(strip infra/main.json) <(strip /tmp/main.json); then
+            echo "::error::infra/main.json is stale. Run: az bicep build --file infra/main.bicep --outfile infra/main.json"
+            exit 1
+          fi
+          echo "In sync."
+
+      - name: Lint the Bicep template
+        run: |
+          # Warnings are informational; the build step above is what blocks.
+          az bicep lint --file infra/main.bicep 2>&1 | tee /tmp/lint.txt
+          if grep -q ' Error ' /tmp/lint.txt; then exit 1; fi
+
+  scripts:
+    name: scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Unit-test the agent migration logic
+        # The part of the migration that can be wrong in a way nobody notices
+        # until someone reverts an agent six months from now.
+        run: node --test "scripts/test/*.test.js"
+
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          for f in scripts/*.sh; do
+            bash -n "$f" && echo "  ✓ $f"
+          done
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # deploy.sh is teaching material as much as it is a program; style
+          # warnings are worth seeing but should not block a deployment fix.
+          shellcheck --severity=error scripts/*.sh
+
+  yaml:
+    name: yaml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse every YAML file
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          # cloud-init.yaml carries __PLACEHOLDERS__ that Bicep substitutes at
+          # deployment time. They are plain scalars, so it still parses as-is —
+          # which is the reason for writing it that way rather than as a
+          # template full of interpolation.
+          python3 - <<'PY'
+          import sys, pathlib, yaml
+          failed = False
+          for path in sorted(pathlib.Path('.').rglob('*.y*ml')):
+              if '.git' in path.parts:
+                  continue
+              try:
+                  list(yaml.safe_load_all(path.read_text()))
+                  print(f"  ok  {path}")
+              except Exception as exc:
+                  print(f"  FAIL {path}: {exc}")
+                  failed = True
+          sys.exit(1 if failed else 0)
+          PY

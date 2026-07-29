@@ -1,0 +1,92 @@
+site_name: LibreChat on Azure
+site_description: A deployment blueprint for legal-services organizations
+site_url: https://marylandlegalaid.github.io/librechat-azure/
+repo_url: https://github.com/MarylandLegalAid/librechat-azure
+repo_name: librechat-azure
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Start here: index.md
+
+  # ---------------------------------------------------------------------------
+  # Reading track 1. A grantee with an Azure subscription and one API key should
+  # reach a working, branded instance without opening a Modules page.
+  # ---------------------------------------------------------------------------
+  - Quickstart:
+      - Overview: quickstart/index.md
+      - 1. Create the infrastructure: quickstart/01-deploy.md
+      - 2. Add your secrets: quickstart/02-secrets.md
+      - 3. Point your domain at it: quickstart/03-dns.md
+      - 4. First login: quickstart/04-first-login.md
+      - 5. Make it yours: quickstart/05-make-it-yours.md
+
+  # ---------------------------------------------------------------------------
+  # Reading track 2. One page per optional capability, each stating what it
+  # costs and why Maryland Legal Aid turned it on.
+  # ---------------------------------------------------------------------------
+  - Modules:
+      - Overview: modules/index.md
+      - How deploys work: modules/deployment.md
+      - Your branding: modules/branding.md
+      - Single sign-on (OIDC): modules/sso-oidc.md
+      - Your own domain: modules/custom-domain.md
+      - Adding and retiring models: modules/models.md
+      - GPT-5.6 and the Responses API: modules/models-gpt56-responses.md
+      - Custom tools (MCP): modules/mcp-servers.md
+      - LegalServer tools: modules/mcp-legalserver.md
+      - LetterWriter: modules/mcp-letterwriter.md
+      - Code interpreter: modules/code-interpreter.md
+      - S3 and legacy file storage: modules/storage-s3-legacy.md
+      - SSH with Entra ID: modules/entra-ssh.md
+      - Backup and restore: modules/backups.md
+      - Upgrading LibreChat: modules/upgrading.md
+      - Migrating an existing install: modules/migrating-an-existing-install.md
+
+  - What it costs: cost-model.md
+  - When it breaks: troubleshooting.md
+  - Compliance: compliance.md
+  - Running it day to day: maintenance.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/MarylandLegalAid/librechat-azure

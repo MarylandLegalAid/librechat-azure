@@ -1,0 +1,71 @@
+# =============================================================================
+# Caddy — TLS termination and hostname routing.
+# =============================================================================
+# This is the entire edge configuration. It is short on purpose: the previous
+# deployment used Traefik, where the same routing lived in Docker labels spread
+# across several services and could not be read in one place.
+#
+# Certificates are obtained from Let's Encrypt automatically on first request
+# for a hostname and renewed in the background. Two things have to be true or
+# issuance fails:
+#
+#   1. The hostname's DNS A record already points at this VM's public IP.
+#   2. Port 80 is reachable from the internet — the ACME HTTP challenge uses it.
+#      That is the only reason port 80 is open; all real traffic is redirected
+#      to HTTPS, which Caddy does by default with no configuration.
+#
+# CHAT_DOMAIN, ADMIN_DOMAIN and ACME_EMAIL come from the environment. During
+# staging they are the staging hostnames; at cutover they become the production
+# ones and the stack is redeployed, at which point Caddy issues new certificates
+# on demand. Nothing else changes.
+# =============================================================================
+
+{
+	# Where Let's Encrypt sends expiry warnings and problem reports. Use a real
+	# address that someone reads — this is how you find out about a renewal
+	# failure before your users do.
+	email {$ACME_EMAIL}
+}
+
+# --- The chat application ----------------------------------------------------
+{$CHAT_DOMAIN} {
+	# LibreChat streams responses token by token over Server-Sent Events. Caddy's
+	# reverse proxy passes those through without buffering by default, so no
+	# flush interval or buffering directives are needed here. Adding response
+	# buffering would make every answer appear all at once at the end.
+	reverse_proxy api:3080
+
+	encode zstd gzip
+
+	log {
+		output file /data/log/chat-access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+# --- The admin panel ---------------------------------------------------------
+# Its own hostname so it can be restricted or taken offline independently of the
+# chat application. Authorization is still LibreChat's — the panel is a thin
+# client over /api/admin/* and a signed-in user without the ADMIN role gets
+# nothing from it. This separation is about blast radius, not authentication.
+#
+# To restrict it to your office network, uncomment the matcher below and list
+# your egress addresses. Do this only once you are certain of those addresses:
+# locking yourself out of the admin panel is recoverable, but annoying.
+#
+#	@notoffice not remote_ip 203.0.113.0/24
+#	respond @notoffice 403
+{$ADMIN_DOMAIN} {
+	reverse_proxy admin-panel:3000
+
+	encode zstd gzip
+
+	log {
+		output file /data/log/admin-access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

@@ -1,0 +1,354 @@
+# =============================================================================
+# LibreChat application configuration.
+# Reference: https://www.librechat.ai/docs/configuration/librechat_yaml
+# =============================================================================
+#
+# THIS FILE IS NOT WHAT THE CONTAINER READS.
+#
+# scripts/deploy.sh merges this file with one storage overlay from
+# config/storage/ and writes the result to librechat.runtime.yaml, which is what
+# gets bind-mounted into the api container. The only difference between the two
+# is the file-storage strategy — see config/storage/README.md for why that one
+# key cannot simply be an environment variable.
+#
+# To see exactly what your deployment will run:
+#
+#   FILE_STORAGE=disk ./scripts/render-config.sh && cat librechat.runtime.yaml
+#
+# =============================================================================
+
+# Configuration version (required) — matches the librechat.example.yaml shipped
+# with v0.8.7. Verified against the v0.8.7 release tag, not inferred from the
+# changelog. When you upgrade LibreChat, diff the new release's own
+# librechat.example.yaml against this file; renamed and removed keys are the most
+# common upgrade break and prose changelogs miss them.
+version: 1.3.13
+
+# Caches the parsed config for faster loading across the app lifecycle.
+cache: true
+
+# =============================================================================
+# Interface
+# =============================================================================
+# Docs: https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/interface
+interface:
+  # modelSpecs (below) requires these two to be explicit — defining any
+  # modelSpecs.list silently disables modelSelect/parameters/presets for any
+  # of the three that isn't already set here, so pin them to their pre-existing
+  # (LibreChat default) values to avoid losing the model dropdown and parameter
+  # controls when the default-model spec was added.
+  modelSelect: true
+  parameters: true
+  # Disables the preset button
+  presets: false
+  # Real-time context-window/token-usage gauge in the conversation UI. This
+  # already defaults to true (unlike modelSelect/parameters/presets above,
+  # it is NOT affected by modelSpecs.list) — pinned explicitly anyway so the
+  # choice is visible in git rather than resting on an implicit default that
+  # could change in a future LibreChat release. contextCost (cost-in-$ display)
+  # deliberately left off/unset — not requested, and shows real dollar figures
+  # to end users, a separate decision.
+  contextUsage: true
+  # "Run Code" button on Markdown code blocks — executes via the self-hosted
+  # code interpreter on its own VM (it needs /dev/kvm, which is why it cannot
+  # live in this Compose stack). See docs/modules/code-interpreter.md.
+  # Requires LIBRECHAT_CODE_BASEURL and the CODEAPI_* variables to be set;
+  # leave this false if you are not running an interpreter.
+  runCode: true
+  # Deliberately keep execute_code unpinned while retaining the Run Code action.
+  defaultPinnedTools: []
+  # Agent Marketplace (v0.8.0+, resurfaced in the model selector in v0.8.7 —
+  # PR #13553): lets users publish agents org-wide via SHARE_PUBLIC in the
+  # Agent Builder UI, instead of every agent being personal-only. Decided
+  # 2026-07-20: turn on with no publish restriction — there's no custom-role
+  # system in place to gate who can SHARE_PUBLIC, so this is all-or-nothing for
+  # now. Revisit narrowing it if that changes.
+  agents: true
+  marketplace:
+    use: true
+  # Privacy Policy and Terms of Service links in the footer.
+  #
+  # GRANTEES: replace both URLs and the whole modalContent below with your own
+  # organization's policies before you let anyone log in. See
+  # docs/modules/branding.md. Shipping someone else's terms of service is worse
+  # than shipping none.
+  privacyPolicy:
+    externalUrl: "https://mdlegalaid.sharepoint.com/:w:/s/briefcase-ops-it/IQA90qYWF5yyTaqUvbBC2hlgAfwtSkETx0_18RSnNoXAt0E?e=x9sgPE"
+    openNewTab: true
+  termsOfService:
+    externalUrl: "https://mdlegalaid.sharepoint.com/:b:/s/briefcase-ops-it/ESp1b64hLm9DuNO699zqDd4BTuizAgZE8QzlEjo4jv_EMA"
+    openNewTab: true
+    modalAcceptance: true
+    modalTitle: "MLAGPT 4 User Agreement"
+    modalContent: |
+     By accessing or using MLAGPT, you acknowledge that you have read, understood, and agree to the terms below. You must click “I Agree” to continue.
+
+     ## 1. Purpose of MLAGPT
+     MLAGPT is an internal Maryland Legal Aid AI platform designed to support legal, operational, and administrative work. It may assist with drafting, summarization, research support, and workflow efficiency. MLAGPT does not replace professional judgment, legal analysis, or official work product review.
+
+     ## 2. Confidentiality & Sensitive Information
+
+      You are responsible for ensuring that any information entered into MLAGPT complies with organizational policies, confidentiality obligations, and applicable laws.
+      - Always verify which features are approved for confidential or regulated data before use.
+     ## 3. Web Search Is Not HIPAA-Compliant and May Violate Client Confidentiality
+
+     ### Important Notice
+     The Web Search feature is NOT HIPAA-compliant. Client confidentiality should be considered before use.
+     - Web Search may send queries to external third-party services outside of MLAGPT’s secure environment.
+     - You must not include PHI, client names, case details, medical information, or other sensitive or confidential data when using Web Search.
+     - Use Web Search only for general, non-sensitive, public information.
+     By continuing, you acknowledge that you understand this limitation and agree to use Web Search appropriately.
+
+     ## 4. Accuracy & Verification
+
+     AI-generated responses:
+     - May be incomplete, outdated, or inaccurate
+     - May contain errors or require contextual judgment
+
+     You agree to independently review, verify, and validate all outputs before relying on them for any legal, operational, or decision-making purpose.
+
+     ## 5. Code Interpreter
+
+     Code Interpreter executes uploaded files and AI-generated code in isolated temporary sandboxes hosted in Maryland Legal Aid’s Azure environment. Sandbox code has no public internet access. Temporary workspaces are removed after one hour, reusable interpreter session files after 24 hours, and files returned to a chat follow normal MLAGPT retention. Confidential client data is permitted. Users remain responsible for reviewing generated code, analysis, and files.
+
+     ## 6. Prohibited Use
+
+     You agree not to use MLAGPT to:
+     - Provide legal advice directly to clients without proper review
+     - Generate or submit work product without human oversight
+     - Bypass organizational policies, security controls, or safeguards
+     - Enter sensitive data into unapproved features (including Web Search)
+
+     ## 7. Monitoring & Compliance
+
+     Use of MLAGPT may be logged or monitored for security, compliance, and system improvement purposes, consistent with organizational policy.
+
+     ## 8. Acceptance
+
+     By clicking “I Agree”, you confirm that:
+     - You understand the limitations of MLAGPT
+     - You understand that Web Search is not HIPAA-compliant
+     - You agree to use the platform responsibly and in accordance with organizational policy
+
+     **If you do not agree, do not proceed.**
+  # Greeting shown on a new chat.
+  customWelcome: "Howdy! Welcome to MLAGPT 4 - How can I help you today?"
+
+# =============================================================================
+# Registration
+# =============================================================================
+# Which social-login buttons may appear. Only `openid` is listed because that is
+# the only provider this blueprint documents wiring up (Entra ID, Google
+# Workspace and Okta all speak OIDC — see docs/modules/sso-oidc.md). Listing a
+# provider here does not enable it; the corresponding environment variables do.
+registration:
+  socialLogins: ['openid']
+
+  # ⚠️  GRANTEES: uncomment this and put YOUR email domains here before you let
+  # anyone reach the login page.
+  #
+  # The default configuration allows self-registration so that you can create
+  # the first administrator account without any identity provider. That is
+  # convenient for ten minutes and dangerous afterwards: until you restrict it,
+  # anyone who finds your URL can create an account. This list is the fix —
+  # only addresses at these domains may register.
+  #
+  # allowedDomains:
+  #   - "example.org"
+  #
+  # Maryland Legal Aid does not set this because it sets ALLOW_REGISTRATION=false
+  # and creates accounts through Entra ID single sign-on instead. Either approach
+  # closes the hole; doing neither does not.
+
+# =============================================================================
+# Endpoints
+# =============================================================================
+endpoints:
+  agents:
+    # Pin the complete v0.8.7 default list explicitly so a future LibreChat
+    # default change cannot silently remove Execute Code.
+    capabilities:
+      - "deferred_tools"
+      - "execute_code"
+      - "file_search"
+      - "web_search"
+      - "artifacts"
+      - "subagents"
+      - "actions"
+      - "context"
+      - "skills"
+      - "tools"
+      - "chain"
+      - "ocr"
+
+  # The built-in openAI endpoint is kept configured but is NOT user-selectable —
+  # modelSpecs.addedEndpoints below deliberately omits it. It exists here for two
+  # things that are not affected by the Responses-API problem described below:
+  # chat-title generation, and the memory agent. OPENAI_MODELS (see env.defaults)
+  # therefore contains only gpt-5.4-nano.
+  openAI:
+    titleModel: "gpt-5.4-nano"
+
+  # ---------------------------------------------------------------------------
+  # GPT-5.6 and the Responses API — read before changing anything below.
+  # ---------------------------------------------------------------------------
+  # The GPT-5.6 family REJECTS requests that combine reasoning with function
+  # tools on /v1/chat/completions. LibreChat's built-in openAI endpoint uses chat
+  # completions by default, so GPT-5.6 breaks there exactly when tools are in
+  # play — which is most of what an agent does.
+  #
+  # In v0.8.7, useResponsesApi is auto-enabled ONLY when web search is on
+  # (packages/api/src/endpoints/openai/llm.ts). There is no model-name-based
+  # detection, so upgrading LibreChat does not fix this for you.
+  #
+  # The fix is three parts that only work together. Removing any one of them
+  # silently reintroduces the bug, and it fails at request time rather than at
+  # startup, so nothing will tell you:
+  #
+  #   1. THIS custom endpoint, whose server-side addParams forces the Responses
+  #      API even if a client submits useResponsesApi: false.
+  #   2. GPT-5.6 models excluded from OPENAI_MODELS, so the built-in endpoint
+  #      cannot serve them at all.
+  #   3. modelSpecs.addedEndpoints omitting openAI, so the built-in endpoint is
+  #      not selectable in the UI and cannot be used to bypass the forced route.
+  #
+  # Agents reach these models by pointing `provider` at this endpoint's `name`
+  # BYTE FOR BYTE, spaces included — "OpenAI GPT-5.6 Responses". LibreChat
+  # resolves a non-built-in provider through getCustomEndpointConfig, so
+  # addParams applies to agent runs. That makes the routing server-enforced
+  # policy rather than per-agent state a user could turn off.
+  #
+  # Full explanation: docs/modules/models-gpt56-responses.md
+  # ---------------------------------------------------------------------------
+  custom:
+    - name: "OpenAI GPT-5.6 Responses"
+      apiKey: "${OPENAI_API_KEY}"
+      baseURL: "https://api.openai.com/v1"
+      models:
+        default:
+          - "gpt-5.6-luna"
+          - "gpt-5.6-terra"
+          - "gpt-5.6-sol"
+        fetch: false
+      titleConvo: false
+      summarize: false
+      modelDisplayLabel: "OpenAI"
+      addParams:
+        useResponsesApi: true
+
+# =============================================================================
+# Model specs
+# =============================================================================
+# Makes gpt-5.6-terra the default model for a user's first-ever new chat, without
+# forcing it on every subsequent new chat. softDefault (not default:true) is what
+# gives that behavior: default:true would re-select gpt-5.6-terra on every new
+# chat regardless of what the user last used; softDefault only fires until the
+# user picks a different model/spec/agent, at which point LibreChat's own
+# "last conversation setup" memory carries that choice forward for future new
+# chats — nothing else to configure for the "remember their choice" half of this.
+# addedEndpoints (+ interface.modelSelect above) keeps the normal anthropic and
+# agents choices available alongside these pinned specs.
+modelSpecs:
+  # Do not add the built-in openAI endpoint here: it would expose GPT-5.6
+  # through a selectable route that does not force the Responses API in v0.8.7.
+  # The built-in endpoint remains configured for title/summary generation and
+  # Agents; ordinary GPT-5.6 chats use only the forced custom endpoint above.
+  addedEndpoints:
+    - anthropic
+    - agents
+  list:
+    - name: "gpt-5.6-luna"
+      label: "GPT-5.6 Luna"
+      preset:
+        endpoint: "OpenAI GPT-5.6 Responses"
+        model: "gpt-5.6-luna"
+        useResponsesApi: true
+    - name: "gpt-5.6-terra"
+      label: "GPT-5.6 Terra"
+      softDefault: true
+      preset:
+        endpoint: "OpenAI GPT-5.6 Responses"
+        model: "gpt-5.6-terra"
+        useResponsesApi: true
+    - name: "gpt-5.6-sol"
+      label: "GPT-5.6 Sol"
+      preset:
+        endpoint: "OpenAI GPT-5.6 Responses"
+        model: "gpt-5.6-sol"
+        useResponsesApi: true
+
+# =============================================================================
+# Speech to text
+# =============================================================================
+# FROZEN. The STT model is a specialist model, changed only as a deliberate,
+# separately-tested decision — not as part of a chat-model refresh.
+speech:
+  speechTab:
+    speechToText:
+      engineSTT: "openai"          # enum: 'openai' | 'azureOpenAI' (matches speech.stt.openai below)
+      autoTranscribeAudio: true
+  stt:
+    openai:
+      apiKey: '${STT_API_KEY}'
+      model: 'whisper-1'
+fileConfig:
+  stt:
+    supportedMimeTypes:
+      - "^audio/(mp3|mpeg|mpeg3|wav|wave|x-wav|ogg|vorbis|mp4|x-m4a|flac|x-flac|webm)$"
+
+# =============================================================================
+# MCP tool servers
+# =============================================================================
+# Each MCP server is its own public repository publishing its own container
+# image; this stack consumes pinned tags. Each is behind a Compose profile and is
+# off unless you list it in COMPOSE_PROFILES — see docs/modules/mcp-servers.md.
+#
+# {{LIBRECHAT_USER_EMAIL}} is LibreChat's built-in placeholder for YAML-defined
+# remote MCP servers. It forwards the signed-in user's email so current-user
+# LegalServer tools (my tasks / my calendar / my matters) can scope to them.
+#
+# Neither server is exposed publicly. They are reachable only on the Compose
+# network, and that is the trust boundary. Both images support an optional
+# shared-secret header (MCP_SHARED_SECRET) that no-ops when unset; it is
+# deliberately left unset here, stated explicitly so the assumption is visible
+# rather than accidental. Set it if you ever move an MCP off this host.
+#
+# ⚠️  v0.8.7 blocks SSRF targets (including private and internal hostnames) for
+# MCP server URLs by default. Docker Compose service names ARE internal
+# hostnames, so without the mcpSettings.allowedAddresses exemption below, every
+# connection attempt fails with "Domain ... is not allowed". Use
+# allowedAddresses (host:port, no scheme) — NOT allowedDomains, which is a
+# strict whitelist-everything-else-blocked mode we do not want.
+mcpSettings:
+  allowedAddresses:
+    - "legalserver-mcp:3001"
+    - "letterwriter-mcp:3002"
+
+mcpServers:
+  LegalServer:
+    type: streamable-http
+    # /legalserver/mcp is this image's canonical path. It also serves /mcp as a
+    # legacy alias; prefer the canonical one so a future removal of the alias
+    # does not break this deployment.
+    url: http://legalserver-mcp:3001/legalserver/mcp
+    headers:
+      X-LegalServer-User-Email: "{{LIBRECHAT_USER_EMAIL}}"
+    description: "Read-only LegalServer matter, document, and discovery tools"
+    chatMenu: true
+  LetterWriter:
+    type: streamable-http
+    url: http://letterwriter-mcp:3002/letter-writer/mcp
+    description: "Create DOCX letters on organization letterhead"
+    chatMenu: true
+
+# =============================================================================
+# Memory (personalization)
+# =============================================================================
+# Runs on the built-in openAI endpoint, which is unaffected by the GPT-5.6
+# Responses routing above — that is one of the two reasons the built-in endpoint
+# stays configured rather than being removed entirely.
+memory:
+  tokenLimit: 3000
+  agent:
+    provider: "openAI"
+    model: "gpt-5.4-nano"

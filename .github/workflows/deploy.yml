@@ -1,0 +1,116 @@
+# =============================================================================
+# Deploy on push to main. Maryland Legal Aid only.
+# =============================================================================
+# This is the second of the two triggers described in docs/modules/deployment.md.
+# Both run the SAME scripts/deploy.sh on the VM — this one just asks for it
+# immediately instead of waiting up to five minutes.
+#
+# A grantee does not need this workflow and can ignore it. It does nothing
+# without the repository variables below, and the job is skipped when they are
+# absent rather than failing on every fork's first push.
+#
+# NO CLIENT SECRET EXISTS. Authentication is OpenID Connect: GitHub mints a
+# short-lived token asserting "this is a run of this workflow, on this branch,
+# in this repository", and Azure trusts that assertion through a federated
+# credential scoped to exactly that. There is nothing to rotate and nothing to
+# leak. Setting it up: docs/modules/deployment.md#github-actions-deploys
+#
+# The app registration needs "Virtual Machine Contributor", scoped to the VM
+# alone — not the resource group and not the subscription. That role permits
+# running a command on that one machine and nothing else.
+# =============================================================================
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  # Redeploy without a commit — after changing a Key Vault secret, for instance,
+  # which leaves git untouched and so would not trigger anything on its own.
+  workflow_dispatch:
+
+permissions:
+  # Required for OIDC. Without it azure/login has nothing to present.
+  id-token: write
+  contents: read
+
+concurrency:
+  # One deploy at a time. deploy.sh also takes a lock on the host, so a race is
+  # safe rather than harmful — but queueing here makes the run history readable.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy to the production VM
+    runs-on: ubuntu-latest
+    # Skipped on forks and on any repository that has not configured the
+    # variables, instead of failing red on somebody else's first push.
+    if: vars.AZURE_CLIENT_ID != ''
+    environment: production
+
+    steps:
+      - name: Sign in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run the deploy script on the VM
+        id: deploy
+        run: |
+          set -euo pipefail
+
+          echo "Invoking deploy.sh on ${{ vars.AZURE_VM_NAME }}"
+
+          # --force because deploy.sh's default is to exit early when the commit
+          # has not changed. It usually has here, but a manual re-run after a
+          # secret change has not, and should still deploy.
+          az vm run-command invoke \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ vars.AZURE_VM_NAME }}" \
+            --command-id RunShellScript \
+            --scripts "/srv/librechat/app/scripts/deploy.sh --force" \
+            --query "value[0].message" \
+            --output tsv | tee /tmp/deploy-output.txt
+
+      - name: Report the result
+        run: |
+          set -euo pipefail
+
+          # `az vm run-command invoke` reports success as long as it managed to
+          # run something — the SCRIPT's exit status is buried in the output
+          # rather than reflected in the CLI's. Without this step a failed
+          # deploy shows a green tick, which is worse than no pipeline at all.
+          #
+          # The output is framed as:
+          #   Enable succeeded:
+          #   [stdout]
+          #   ...
+          #   [stderr]
+          #   ...
+          output=$(cat /tmp/deploy-output.txt)
+
+          echo "### Deploy output" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$output" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if echo "$output" | grep -q "deployed .* successfully"; then
+            echo "Deploy succeeded."
+            exit 0
+          fi
+
+          if echo "$output" | grep -q "already up to date"; then
+            echo "Nothing to deploy."
+            exit 0
+          fi
+
+          echo "::error::deploy.sh did not report success. Read the output above."
+          if echo "$output" | grep -q "ROLLBACK ALSO FAILED"; then
+            echo "::error::The rollback also failed. The site is DOWN and needs a human now."
+          elif echo "$output" | grep -q "rolled back successfully"; then
+            echo "::error::Rolled back to the previous commit. The site is up on the OLD code."
+          fi
+          exit 1

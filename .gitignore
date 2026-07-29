@@ -1,0 +1,76 @@
+# =============================================================================
+# This repository is PUBLIC (or will be — see the repo README). Everything below
+# is excluded because it either is a secret, contains one, or is an organization's
+# private asset that a public fork must never carry.
+#
+# Flipping a repository to public exposes its ENTIRE HISTORY, not just the tip.
+# A secret committed today and deleted tomorrow is still public forever. That is
+# why these rules exist from the first commit rather than being added later.
+#
+# `gitleaks` runs in CI over every push and pull request as the mechanical
+# backstop for this file (.github/workflows/secrets.yml).
+# =============================================================================
+
+# --- Secrets ---------------------------------------------------------------
+# The real .env is rendered on the VM at deploy time from Azure Key Vault by
+# scripts/render-env.sh and never exists in this repository.
+.env
+.env.*
+!.env.example
+
+# Keys and certificates of every shape.
+*.pem
+*.key
+*.pfx
+*.p12
+*.jwk
+*.jwks
+!*.pub
+
+# --- Organization assets ---------------------------------------------------
+# Letterhead templates are an organization's private branding and are read at
+# runtime from the data disk (LETTERHEAD_DIR), never from git. See
+# docs/modules/mcp-letterwriter.md.
+*.docx
+*.doc
+
+# --- Data ------------------------------------------------------------------
+# Mongo dumps taken during a migration or a restore test are a full copy of
+# confidential client data.
+*.archive
+*.archive.gz
+*.dump
+dump/
+mongodump*/
+librechat.runtime.yaml
+
+# --- Local tooling ---------------------------------------------------------
+node_modules/
+.venv/
+site/
+__pycache__/
+
+# --- OS / editor cruft -----------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Filled-in deployment parameters name your machine, your admin source
+# addresses, and your alert recipients. Keep them out of a public repository.
+infra/main.parameters.json
+
+# --- Internal planning documents -------------------------------------------
+# These are working notes for the people running a specific deployment, and they
+# routinely carry exactly what a public repository must not: subscription IDs,
+# tenant IDs, resource IDs, and the addresses of production hosts.
+#
+# Keep them next to the repository, not in it. If some of the content belongs in
+# public documentation, rewrite that part into docs/ with the identifiers taken
+# out, rather than committing the original.
+IMPLEMENTATION_PLAN.md
+MIGRATION_PLAN.md
+HANDOFF.md
+START-HERE.md
+*-recon.md
+*-internal.md
