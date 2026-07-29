@@ -27,7 +27,7 @@ Creating the vault does not give you access to its contents — that is a separa
 assignment, and it is deliberate.
 
 ```bash
-VAULT=kv-librechat-prod
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
 SUBSCRIPTION=$(az account show --query id -o tsv)
 ME=$(az ad signed-in-user show --query id -o tsv)
 
@@ -46,7 +46,7 @@ Paste this whole block. It generates the values that should be random and prompt
 for the ones only you know.
 
 ```bash
-VAULT=kv-librechat-prod
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
 
 set() { az keyvault secret set --vault-name "$VAULT" --name "$1" --value "$2" --output none && echo "  set $1"; }
 
@@ -91,7 +91,9 @@ set BACKUP-STORAGE-ACCOUNT "$(az storage account list -g rg-librechat-prod --que
 ## Check it
 
 ```bash
-az keyvault secret list --vault-name kv-librechat-prod --query "[].name" -o tsv | sort
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
+az keyvault secret list --vault-name "$VAULT" --query "[].name" -o tsv | sort
 ```
 
 You should see the names above. Values are not printed, which is the point.

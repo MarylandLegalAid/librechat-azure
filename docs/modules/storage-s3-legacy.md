@@ -53,10 +53,12 @@ that **you do not have to move the files**.
 Set `FILE_STORAGE=disk` and **leave your AWS credentials set**:
 
 ```bash
-az keyvault secret set --vault-name kv-librechat-prod --name AWS-ACCESS-KEY-ID     --value "..."
-az keyvault secret set --vault-name kv-librechat-prod --name AWS-SECRET-ACCESS-KEY --value "..."
-az keyvault secret set --vault-name kv-librechat-prod --name AWS-REGION            --value "us-east-1"
-az keyvault secret set --vault-name kv-librechat-prod --name AWS-BUCKET-NAME       --value "your-bucket"
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
+az keyvault secret set --vault-name "$VAULT" --name AWS-ACCESS-KEY-ID     --value "..."
+az keyvault secret set --vault-name "$VAULT" --name AWS-SECRET-ACCESS-KEY --value "..."
+az keyvault secret set --vault-name "$VAULT" --name AWS-REGION            --value "us-east-1"
+az keyvault secret set --vault-name "$VAULT" --name AWS-BUCKET-NAME       --value "your-bucket"
 ```
 
 What happens:
@@ -86,7 +88,9 @@ If you already run a bucket under an appropriate agreement and would rather keep
 files there:
 
 ```bash
-az keyvault secret set --vault-name kv-librechat-prod --name FILE-STORAGE --value "s3"
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
+az keyvault secret set --vault-name "$VAULT" --name FILE-STORAGE --value "s3"
 ```
 
 with the four `AWS-*` secrets set. Then redeploy.

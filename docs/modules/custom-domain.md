@@ -34,7 +34,7 @@ same name get rate-limited.
 ## Tell the application
 
 ```bash
-V=kv-librechat-prod
+V=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
 az keyvault secret set --vault-name $V --name CHAT-DOMAIN     --value "chat.yourorg.org"               --output none
 az keyvault secret set --vault-name $V --name ADMIN-DOMAIN    --value "chat-admin.yourorg.org"         --output none
 az keyvault secret set --vault-name $V --name DOMAIN-CLIENT   --value "https://chat.yourorg.org"       --output none

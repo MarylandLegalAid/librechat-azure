@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "17245288678303963377"
+      "templateHash": "7804343604021187397"
     }
   },
   "parameters": {
@@ -33,7 +33,7 @@
       "minLength": 3,
       "maxLength": 11,
       "metadata": {
-        "description": "Prefix for every resource name. \"librechat\" produces vm-librechat-prod, kv-librechat-prod, and so on."
+        "description": "Prefix for every resource name. \"librechat\" produces vm-librechat-prod, nsg-librechat-prod, and so on. (The key vault and storage account additionally carry a uniqueness suffix, because their names are globally unique across all of Azure.)"
       }
     },
     "environment": {
@@ -159,7 +159,7 @@
     "pipName": "[format('pip-{0}-{1}', parameters('namePrefix'), parameters('environment'))]",
     "vnetName": "[format('vnet-{0}-{1}', parameters('namePrefix'), parameters('environment'))]",
     "dataDiskName": "[format('disk-{0}-{1}-data', parameters('namePrefix'), parameters('environment'))]",
-    "keyVaultName": "[format('kv-{0}-{1}', parameters('namePrefix'), parameters('environment'))]",
+    "keyVaultName": "[format('{0}-{1}', take(format('kv-{0}-{1}', parameters('namePrefix'), parameters('environment')), 17), substring(uniqueString(resourceGroup().id), 0, 6))]",
     "vaultName": "[format('rsv-{0}-{1}', parameters('namePrefix'), parameters('environment'))]",
     "actionGroupName": "[format('ag-{0}-{1}', parameters('namePrefix'), parameters('environment'))]",
     "workspaceName": "[format('appi-{0}-{1}', parameters('namePrefix'), parameters('environment'))]",

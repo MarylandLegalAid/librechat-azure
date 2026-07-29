@@ -24,7 +24,7 @@ Never paste these into a chat window, a ticket, a document, or your shell histor
 There is no reason for a human to see them at all.
 
 ```bash
-VAULT=kv-librechat-prod
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
 OLD_RG=<old resource group>
 OLD_VM=<old vm name>
 
@@ -58,11 +58,13 @@ done
 ### Verify by checksum, never by eye
 
 ```bash
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
 # on the old host, via run-command
 grep -m1 '^CREDS_KEY=' /srv/LibreChat/.env | cut -d= -f2- | tr -d '\r\n' | sha256sum
 
 # from your workstation
-az keyvault secret show --vault-name kv-librechat-prod -n CREDS-KEY \
+az keyvault secret show --vault-name "$VAULT" -n CREDS-KEY \
   --query value -o tsv | tr -d '\r\n' | sha256sum
 ```
 

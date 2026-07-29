@@ -73,7 +73,9 @@ Choose one:
     No self-service signup at all; you create every account in the admin panel.
 
     ```bash
-    az keyvault secret set --vault-name kv-librechat-prod \
+    VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
+    az keyvault secret set --vault-name "$VAULT" \
       --name ALLOW-REGISTRATION --value "false" --output none
     ```
 

@@ -83,7 +83,10 @@
 
     "namePrefix": {
       "_comment": [
-        "Names every resource: vm-librechat-prod, kv-librechat-prod, and so on.",
+        "Names every resource: vm-librechat-prod, nsg-librechat-prod, and so on.",
+        "The key vault and storage account additionally get a short uniqueness suffix,",
+        "because their names must be unique across all of Azure, not just your",
+        "subscription. Read the real names from the deployment outputs.",
         "3 to 11 characters."
       ],
       "value": "librechat"

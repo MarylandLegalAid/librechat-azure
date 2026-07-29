@@ -25,7 +25,9 @@ never heard of LibreChat. Bundling it here would hide it from them.
 ## Turning one on
 
 ```bash
-az keyvault secret set --vault-name kv-librechat-prod \
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
+az keyvault secret set --vault-name "$VAULT" \
   --name COMPOSE-PROFILES --value "mcp-legalserver,mcp-letterwriter" --output none
 ```
 

@@ -8,7 +8,9 @@ rebuild.
 `APP_TITLE` is per-deployment, so it lives in the key vault:
 
 ```bash
-az keyvault secret set --vault-name kv-librechat-prod \
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
+az keyvault secret set --vault-name "$VAULT" \
   --name APP-TITLE --value "Your Organization AI" --output none
 ```
 

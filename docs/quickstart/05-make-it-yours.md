@@ -32,7 +32,9 @@ confined to the handful of files below makes that painless.
 `APP_TITLE` is a key vault secret because it is per-deployment:
 
 ```bash
-az keyvault secret set --vault-name kv-librechat-prod \
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
+az keyvault secret set --vault-name "$VAULT" \
   --name APP-TITLE --value "Your Organization AI" --output none
 ```
 

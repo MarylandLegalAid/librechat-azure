@@ -98,7 +98,7 @@ Azure prints several outputs. Write down two of them:
 | Output | What it is for |
 |---|---|
 | `publicIpAddress` | The address your DNS record will point at (step 3) |
-| `keyVaultName` | Where your secrets go (step 2) — usually `kv-librechat-prod` |
+| `keyVaultName` | Where your secrets go (step 2). It carries a short uniqueness suffix — key vault names must be unique across all of Azure, not just your subscription — so read it rather than guessing it. |
 
 From the command line:
 

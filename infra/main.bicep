@@ -40,7 +40,7 @@ param alertEmail string
 // Parameters with sensible defaults
 // -----------------------------------------------------------------------------
 
-@description('Prefix for every resource name. "librechat" produces vm-librechat-prod, kv-librechat-prod, and so on.')
+@description('Prefix for every resource name. "librechat" produces vm-librechat-prod, nsg-librechat-prod, and so on. (The key vault and storage account additionally carry a uniqueness suffix, because their names are globally unique across all of Azure.)')
 @minLength(3)
 @maxLength(11)
 param namePrefix string = 'librechat'
@@ -105,7 +105,22 @@ var nsgName = 'nsg-${namePrefix}-${environment}'
 var pipName = 'pip-${namePrefix}-${environment}'
 var vnetName = 'vnet-${namePrefix}-${environment}'
 var dataDiskName = 'disk-${namePrefix}-${environment}-data'
-var keyVaultName = 'kv-${namePrefix}-${environment}'
+// ⚠️ Key Vault names are globally unique across ALL of Azure, not just your
+// subscription or your tenant. A fixed name in a published blueprint therefore
+// works exactly once, for whoever deploys it first — everybody after that gets
+// VaultAlreadyExists and no obvious way to interpret it. ('kv-librechat-prod'
+// is already taken by somebody, which is how we found this out.)
+//
+// So the name carries a suffix derived from the resource group ID: stable
+// across redeploys of the same deployment, different for everyone else. Read
+// the actual name from this template's keyVaultName output, or with:
+//     az keyvault list -g <resource-group> --query "[0].name" -o tsv
+//
+// The 24-character limit is the reason for take(): 17 for the base, 1 for the
+// separator, 6 for the suffix. namePrefix is capped at 11 above, which
+// guarantees the truncation can never land on the separator and produce a
+// double hyphen — a name Key Vault rejects.
+var keyVaultName = '${take('kv-${namePrefix}-${environment}', 17)}-${substring(uniqueString(resourceGroup().id), 0, 6)}'
 var vaultName = 'rsv-${namePrefix}-${environment}'
 var actionGroupName = 'ag-${namePrefix}-${environment}'
 var workspaceName = 'appi-${namePrefix}-${environment}'
@@ -338,6 +353,17 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
       // that differ between deployments are written there as __PLACEHOLDERS__
       // and substituted here. Keeping that file free of template syntax means
       // it can be read, linted and reviewed as ordinary cloud-config.
+      //
+      // ⚠️ customData is IMMUTABLE once the machine exists. Changing anything
+      // that feeds into it — namePrefix, environment, repoUrl, repoBranch,
+      // dataDir, enableDeployTimer — and redeploying fails with
+      // PropertyChangeNotAllowed rather than being quietly ignored.
+      //
+      // On a new machine, delete the VM and let this template recreate it: the
+      // data disk is a separate resource with deleteOption Detach and survives.
+      // On a live one, edit /etc/librechat-deploy.conf on the machine instead —
+      // that file is all cloud-init produced from these values anyway.
+      // See docs/troubleshooting.md#redeploying-the-template-fails-with-propertychangenotallowed
       customData: base64(replace(replace(replace(replace(replace(loadTextContent('cloud-init.yaml'), '__KEY_VAULT_NAME__', keyVaultName), '__REPO_URL__', repoUrl), '__REPO_BRANCH__', repoBranch), '__DATA_DIR__', dataDir), '__DEPLOY_TIMER_ENABLED__', toLower(string(enableDeployTimer))))
     }
     networkProfile: {

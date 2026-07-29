@@ -76,6 +76,52 @@ Or just run `az ssh vm` again. **Do this before investigating anything else.**
 
 ---
 
+## Redeploying the template fails with `PropertyChangeNotAllowed`
+
+```
+Changing property 'osProfile.customData' is not allowed.
+```
+
+**Azure will not let you change a virtual machine's cloud-init content after the
+machine exists.** Not "it is ignored" — the deployment fails outright.
+
+The template substitutes a handful of values into `infra/cloud-init.yaml`, so changing
+any of these parameters and redeploying hits this:
+
+- `namePrefix` or `environment` — they determine the key vault's name
+- `repoUrl`, `repoBranch`
+- `dataDir`
+- `enableDeployTimer`
+
+Everything else — `vmSize`, `healthCheckUrl`, `adminSourceAddressPrefixes`, alert
+settings, disk size — redeploys cleanly.
+
+### If the machine is new and holds nothing
+
+Delete the VM and let the template recreate it. The data disk is a **separate
+resource** with `deleteOption: Detach`, so it survives and is reattached:
+
+```bash
+az vm delete -g rg-librechat-prod -n vm-librechat-prod --yes
+az deployment group create -g rg-librechat-prod \
+  --template-file infra/main.bicep --parameters @infra/main.parameters.json
+```
+
+### If the machine is in production
+
+Do not delete it. Change the setting on the machine instead — cloud-init only ever
+wrote these to a file, and that file is editable:
+
+```bash
+az vm run-command invoke -g rg-librechat-prod -n vm-librechat-prod \
+  --command-id RunShellScript \
+  --scripts "sed -i 's|^REPO_URL=.*|REPO_URL=https://github.com/YOURORG/librechat-azure.git|' /etc/librechat-deploy.conf && cat /etc/librechat-deploy.conf" \
+  --query "value[0].message" -o tsv
+```
+
+Then bring the template's parameter back in line with reality so the two do not
+disagree, and accept that this particular parameter is now advisory for this machine.
+
 ## The machine never finished setting itself up
 
 ```bash
@@ -183,7 +229,9 @@ Every `mcpServers` URL needs a matching `mcpSettings.allowedAddresses` entry, as
 Check `COMPOSE_PROFILES` includes the profile:
 
 ```bash
-az keyvault secret show --vault-name kv-librechat-prod --name COMPOSE-PROFILES --query value -o tsv
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+
+az keyvault secret show --vault-name "$VAULT" --name COMPOSE-PROFILES --query value -o tsv
 ```
 
 ### It is running but unhealthy

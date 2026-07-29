@@ -71,7 +71,7 @@ error.
 ### 3. Switch it on
 
 ```bash
-V=kv-librechat-prod
+V=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
 az keyvault secret set --vault-name $V --name COMPOSE-PROFILES \
   --value "mcp-letterwriter" --output none
 az keyvault secret set --vault-name $V --name ORGANIZATION-NAME \

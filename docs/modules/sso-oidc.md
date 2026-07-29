@@ -52,7 +52,7 @@ redirect URI mid-cutover is avoidable and annoying.
 ### 4. Configure it
 
 ```bash
-V=kv-librechat-prod
+V=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
 TENANT=$(az account show --query tenantId -o tsv)
 
 az keyvault secret set --vault-name $V --name OPENID-CLIENT-ID     --value "<application id>" --output none
