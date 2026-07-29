@@ -1,0 +1,9 @@
+# Documentation toolchain, pinned so the site builds the same way in CI as it
+# does on your machine.
+#
+#   python3 -m venv .venv && . .venv/bin/activate
+#   pip install -r docs/requirements.txt
+#   mkdocs serve          # then open http://127.0.0.1:8000
+#
+# Renovate proposes updates to these the same way it does container images.
+mkdocs-material==9.7.7

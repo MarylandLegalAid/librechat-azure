@@ -1,0 +1,33 @@
+# gitleaks configuration.
+#
+# The default rule set, plus a deliberately narrow allowlist. Every entry below
+# names a specific value and says why it is not a secret. Nothing here exempts a
+# whole file or a whole directory — a path-based exemption is how a real secret
+# eventually gets committed into an "obviously safe" file.
+#
+# Run it the way CI does:
+#     gitleaks git --redact --verbose --exit-code 1 .
+#     gitleaks dir --redact --verbose --exit-code 1 .
+
+title = "librechat-azure"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Azure built-in role definition IDs. These are public, fixed constants that are
+identical in every Azure tenant and are published by Microsoft:
+https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
+
+They look like high-entropy secrets to a generic detector and are not. They are
+listed individually rather than exempting infra/ as a whole, so that a real
+credential appearing in a Bicep file is still caught.
+"""
+regexTarget = "match"
+regexes = [
+  # Key Vault Secrets User — lets the VM read its own secrets.
+  '''4633458b-17de-408a-b874-0445c86b69e6''',
+  # Storage Blob Data Contributor — lets the VM write nightly database dumps.
+  '''ba92f5b4-2d11-453d-a403-e96b0029c9fe''',
+]
