@@ -323,8 +323,11 @@ group "The committed ARM template matches the Bicep source"
 if command -v az >/dev/null 2>&1; then
   regenerated="$(mktemp)"
   if az bicep build --file infra/main.bicep --outfile "$regenerated" >/dev/null 2>&1; then
-    if diff -q <(jq -S 'del(.metadata._generator.version, .metadata._generator.templateHash)' infra/main.json) \
-                <(jq -S 'del(.metadata._generator.version, .metadata._generator.templateHash)' "$regenerated") >/dev/null; then
+    # walk(), not a top-level del(): nested modules embed their own _generator
+    # block deeper in the JSON, so stripping only the outer one still compares
+    # Bicep CLI versions between whoever built the file and whoever checks it.
+    strip_gen() { jq -S 'walk(if type == "object" then del(._generator) else . end)' "$1"; }
+    if diff -q <(strip_gen infra/main.json) <(strip_gen "$regenerated") >/dev/null; then
       pass "infra/main.json is in sync with infra/main.bicep"
     else
       fail "infra/main.json is stale — run: az bicep build --file infra/main.bicep --outfile infra/main.json"

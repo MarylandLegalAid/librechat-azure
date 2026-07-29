@@ -58,7 +58,11 @@ jobs:
           # provisions an older shape of the infrastructure and nothing warns
           # anyone. The generator's own version and hash are stripped so that an
           # Azure CLI upgrade does not read as a source change.
-          strip() { jq -S 'del(.metadata._generator.version, .metadata._generator.templateHash)' "$1"; }
+          # walk(), not a top-level del(): nested modules (infra/roles.bicep)
+          # embed their OWN _generator block deeper in the JSON, so stripping
+          # only the outer one still compares Bicep CLI versions — which is the
+          # exact false positive this strip exists to avoid.
+          strip() { jq -S 'walk(if type == "object" then del(._generator) else . end)' "$1"; }
           if ! diff -u <(strip infra/main.json) <(strip /tmp/main.json); then
             echo "::error::infra/main.json is stale. Run: az bicep build --file infra/main.bicep --outfile infra/main.json"
             exit 1
