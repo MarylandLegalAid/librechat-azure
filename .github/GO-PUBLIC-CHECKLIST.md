@@ -1,49 +1,51 @@
 # Going public
 
-This repository was born **private** and is flipped **public** after the production
-cutover. Same repository, same history throughout — which is exactly why no secret was
-ever committed to it, even while nobody outside could read it.
+**Status: done. This repository was made public on 2026-07-29.**
 
-Three capabilities are unavailable on a private repository under a Free organization
-plan and become available, free, the moment it is public. They are listed here because
-each one is a gap in enforcement or delivery while the repository is private, and it
-would be easy to flip the repository and never notice they were still off.
+Kept as a record of what was checked, and because anyone forking this blueprint
+privately before publishing their own copy will need the same list.
 
-## Before flipping
+## Why it happened earlier than planned
 
-- [ ] **Review the full history, not just the tip.** Making a repository public exposes
-      every object in it. A secret committed and removed the next day is still readable
-      by anyone who knows to look.
+The original plan had this repository stay private until after the production cutover,
+so that a live migration would not have an audience. Three capabilities turned out to
+be unavailable on a private repository under a Free organization plan, and free the
+moment it is public:
 
-      ```bash
-      gitleaks git --redact --verbose --exit-code 1 .
-      git log --stat --all | grep -iE '\.env$|\.pem$|\.docx?$|parameters\.json$'
-      ```
+| | Private | Public |
+|---|---|---|
+| Secret scanning + push protection | ❌ | ✅ |
+| GitHub Pages, for the documentation site | ❌ | ✅ |
+| Cloning with no credential at all | ❌ | ✅ |
 
-- [ ] **Confirm no production identifiers survived.** Subscription IDs, tenant IDs,
-      resource IDs, and the addresses of production hosts must not be here.
+Deploy keys — the obvious way to bridge the third — are disabled organization-wide, so
+keeping the repository private meant either changing a policy that affects every
+repository in the organization, or issuing a personal access token.
 
-      ```bash
-      for pat in <subscription-id> <tenant-id> <prod-ip>; do
-        git grep -l "$pat" $(git rev-list --all) 2>/dev/null | head
-      done
-      ```
+So the private phase was costing the two mechanical protections that matter most for a
+repository that will be published, in order to avoid an audience that a brand-new,
+unadvertised repository does not have. Flipped early, deliberately.
 
-      `.github/workflows/secrets.yml` enforces the IP half of this on every push, and
-      blocks the internal planning documents by name. The identifiers themselves are
-      deliberately not listed in the workflow — writing them into a file in this
-      repository in order to check for them would commit them.
+## What was verified before flipping
 
-- [ ] **Confirm no letterhead `.docx` is present, in any commit.**
+Making a repository public exposes **every object in its history**, not just the tip. A
+secret committed and removed the next day is still readable by anyone who looks.
 
-## At the flip
+- [x] `gitleaks git --redact --exit-code 1 .` over the full history — no leaks
+- [x] `gitleaks dir` over the working tree — no leaks
+- [x] No subscription ID, tenant ID, or production host address in any commit
+- [x] No `.env`, `.pem`, `.docx`, or filled-in `main.parameters.json` in any commit
+- [x] Internal planning documents absent, and blocked by `.gitignore` and by
+      `.github/workflows/secrets.yml`
 
-- [ ] Make the repository public.
+Two of these are now enforced on every push rather than checked by hand: the workflow
+fails on a forbidden file type, and on any IP address in documentation outside the
+ranges RFC 5737 reserves for examples.
 
-- [ ] **Enable secret scanning and push protection.** Not available while private on
-      this plan, so until now `gitleaks` in CI has been the only mechanical
-      enforcement. Push protection is better than CI: it refuses the push rather than
-      reporting the leak afterwards.
+## What was turned on at the flip
+
+- [x] **Secret scanning and push protection.** Better than CI: a push containing a
+      recognized credential is refused, rather than reported after the fact.
 
       ```bash
       gh api -X PATCH repos/OWNER/REPO \
@@ -51,40 +53,45 @@ would be easy to flip the repository and never notice they were still off.
         -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
       ```
 
-- [ ] **Enable GitHub Pages and turn on publishing.** The docs have been building on
-      every push all along; only publishing was gated.
+- [x] **GitHub Pages**, and the `PAGES_ENABLED` variable the docs workflow gates on.
+      The site had been building on every push all along; only publishing was gated.
 
       ```bash
       gh api -X POST repos/OWNER/REPO/pages -f build_type=workflow
       gh variable set PAGES_ENABLED --body true
       ```
 
-- [ ] **Retire the deploy key.** While the repository was private, the VM cloned it
-      using a read-only deploy key. A public repository needs no credential at all, and
-      that is the whole point — a grantee's machine clones with nothing configured.
+- [x] **Private vulnerability reporting**, plus `SECURITY.md`. Anyone can file an issue
+      now, and a public issue is the wrong place for a vulnerability.
 
-      1. On the VM, change `REPO_URL` in `/etc/librechat-deploy.conf` back to the
-         `https://` form.
-      2. Delete the vault secret:
-         ```bash
-         az keyvault secret delete --vault-name kv-librechat-prod --name BOOTSTRAP-GIT-DEPLOY-KEY
-         ```
-      3. Delete the deploy key on GitHub (Settings → Deploy keys).
-      4. Remove `/root/.ssh/id_ed25519` from the VM.
-      5. Force a deploy and confirm it still pulls.
+- [x] **The Deploy to Azure button.** It reads `infra/main.json` from the raw URL on
+      `main`, so it could not resolve while the repository was private. Confirmed
+      returning HTTP 200, valid ARM, 22 resources, three required parameters.
 
-- [ ] **Verify the Deploy to Azure button.** It reads `infra/main.json` from the raw
-      URL on `main`, so it cannot work until the repository is public. Click it and
-      confirm the portal renders the parameter form.
+      CI already asserts `main.json` matches `main.bicep`; nothing had ever checked
+      that the *link* resolved.
 
-      CI already asserts `main.json` matches `main.bicep`, so the button deploys what
-      the Bicep source says — but nothing has ever checked that the *link* resolves.
+- [x] **No deploy key or token was ever issued.** A public repository needs no
+      credential to clone, which is the entire configuration burden of autodeploy for
+      someone adopting this: none.
 
-## After
+## Still to do
 
-- [ ] Add a `SECURITY.md` with a private reporting address, since anyone can now file
-      an issue and a public issue is the wrong place for a vulnerability.
-- [ ] Turn on branch protection for `main` if the plan allows it.
+- [ ] Branch protection on `main`, once the deploy pipeline is wired up and there is
+      something for a required status check to require.
 - [ ] Have someone outside the project follow the Quickstart on a clean subscription,
-      and fix whatever stops them. This is the only real test of the documentation, and
-      reading it yourself is not a substitute.
+      and fix whatever stops them. This is the only real test of the documentation.
+      Reading it yourself is not a substitute and never has been.
+
+## If you fork this privately
+
+`librechat-bootstrap.sh` on the VM reads an optional `BOOTSTRAP-GIT-DEPLOY-KEY` secret
+from Key Vault — base64-encoded, because a `.env`-style secret cannot hold a
+multi-line value — and installs it before cloning. Set that secret and point `REPO_URL`
+in `/etc/librechat-deploy.conf` at the `git@github.com:` form, and a private fork works
+the same way.
+
+`render-env.sh` keeps every `BOOTSTRAP-*` secret out of `.env`, so a host credential
+never reaches the application's environment.
+
+When you publish your fork, work back through this list.
