@@ -44,7 +44,14 @@ const agent = (overrides) =>
 
 test('model-map.json parses and drops the documentation keys', () => {
   assert.ok(!Object.prototype.hasOwnProperty.call(MAP, '_comment'));
-  assert.strictEqual(Object.keys(MAP).length, 9);
+
+  // Derived from the file rather than hardcoded. The count is not the point —
+  // dropping keys that start with an underscore, and keeping every real row, is.
+  // A literal here fails every time a legitimate mapping is added, which trains
+  // whoever is adding one to edit the number until the test goes green.
+  const expected = Object.keys(RAW_MAP).filter((k) => !k.startsWith('_'));
+  assert.deepStrictEqual(Object.keys(MAP).sort(), expected.sort());
+  assert.ok(expected.length > 0, 'the mapping table must not be empty');
 });
 
 test('every mapping target is itself an approved model', () => {
