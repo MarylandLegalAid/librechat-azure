@@ -141,14 +141,60 @@ survive — Word sometimes splits a placeholder across formatting runs if you ed
 character by character, which makes it stop being recognized. If a placeholder is not
 being replaced, retype it in one go.
 
-## The document comes back directly
+## How the document comes back
 
-The tool returns the `.docx` as **MCP binary content**, and LibreChat attaches it to
-the conversation.
+The tool writes the `.docx` to the data disk and returns a **download URL on your own
+domain**, which Caddy serves at `/letters/<token>/<filename>.docx`.
 
-An earlier version uploaded to S3 and returned a presigned link. Returning the file
-directly is better in three ways: it works identically in both storage modes, there is
-no link to expire, and there is no object store credential in the tool at all.
+### Why not simply attach it
+
+The MCP specification lets a tool return bytes directly, as an embedded resource with a
+base64 `blob`, and `letterwriter-mcp` did exactly that in v1.0.0. **LibreChat v0.8.7 does
+not read it.** Its tool-result handler has cases for text, image and resource, and the
+resource case looks only at `ui://` URIs, `text`, `uri` and `mimeType`. `blob` is never
+touched — `grep` it in `packages/api` and you get nothing.
+
+The failure is quiet and misleading. The letter renders correctly, the tool call succeeds,
+and the model receives a description of a file with no way to produce it. What a user sees
+is a confident download link pointing at `file:///Closing%20Letter.docx`, which the browser
+resolves against the current page — so it looks like a link back to the chat application.
+
+So delivery goes back to a URL, but not back to S3. The file is written to a directory the
+deployment already serves. Nothing expires, and no cloud credential is involved.
+
+### The three settings
+
+| Where | Setting |
+|---|---|
+| `compose.yaml` | `LETTER_OUTPUT_DIR: /data/letters` and `LETTER_PUBLIC_BASE_URL: https://${CHAT_DOMAIN}/letters` |
+| `compose.yaml` | `${DATA_DIR}/letters` mounted **writable** into the MCP, **read-only** into Caddy |
+| `Caddyfile` | `handle_path /letters/*` with `root * /srv/letters` and `file_server` |
+
+The MCP refuses to start if only one of the two variables is set — an output directory
+with no URL writes files nobody can reach, and a URL with no directory advertises files
+that were never written. `validate-config.sh` checks all four couplings, including that
+the Caddy path matches the advertised URL.
+
+!!! danger "Never enable `browse` on that `file_server`"
+    Directory listing would let anyone who requests `/letters/` enumerate every token and
+    therefore download every letter your organization has generated. It is off by default
+    and one word away from being on. `validate-config.sh` fails the build if it appears.
+
+### What the URL protects
+
+The URL is a **capability**: whoever holds it can fetch that letter, with no LibreChat
+session required. That is the same model as the presigned S3 link it replaces, minus the
+expiry. Two things make it defensible:
+
+- The token is 24 bytes from a CSPRNG, base64url-encoded. It is not guessable.
+- The letter's text is already in the conversation that produced it — the agent drafted
+  it there — so the file exposes nothing that conversation does not already hold.
+
+Links **do not expire**, deliberately. An expiring link makes a letter written three weeks
+ago look like data loss, which is the specific complaint that ended the S3 version. The
+directory is ordinary files on the data disk, covered by Azure Backup, and can be pruned
+by age if it ever grows enough to matter. At roughly 250 KB per letter it will take a
+long time.
 
 ## Checking it works
 
@@ -157,7 +203,7 @@ docker compose exec api curl -fsS http://letterwriter-mcp:3002/healthz
 ```
 
 ```json
-{"ok":true,"service":"letterwriter-mcp","version":"1.0.0",
+{"ok":true,"service":"letterwriter-mcp","version":"1.1.0",
  "letterheads":{"count":13,"default":"generic",
                 "registry":"/data/letterheads/letterheads.json",
                 "using_bundled_registry":false}}

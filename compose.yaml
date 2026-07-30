@@ -54,6 +54,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${DATA_DIR}/caddy/data:/data
       - ${DATA_DIR}/caddy/config:/config
+      # Generated letters, served at /letters/* (see Caddyfile). Read-only: Caddy
+      # never writes here, and a writable public document root is worth not
+      # having. Empty and harmless when the mcp-letterwriter profile is off.
+      - ${DATA_DIR}/letters:/srv/letters:ro
     depends_on:
       - api
       - admin-panel
@@ -278,7 +282,7 @@ services:
       retries: 3
 
   letterwriter-mcp:
-    image: ghcr.io/marylandlegalaid/letterwriter-mcp:v1.0.0
+    image: ghcr.io/marylandlegalaid/letterwriter-mcp:v1.1.0
     container_name: letterwriter-mcp
     profiles: ["mcp-letterwriter"]
     restart: unless-stopped
@@ -291,8 +295,20 @@ services:
       # never committed to git. They are placed on the data disk out of band and
       # are covered by Azure Backup. See docs/modules/mcp-letterwriter.md.
       LETTERHEAD_DIR: /data/letterheads
+      # Where the rendered .docx is written, and the URL that serves it. Both or
+      # neither — the server refuses to start with only one, because each half
+      # alone fails silently until somebody clicks a link.
+      #
+      # These exist because LibreChat v0.8.7 discards `blob` from an MCP embedded
+      # resource. Without them the letter is generated correctly and then thrown
+      # away, and the model invents a plausible link to it. See
+      # docs/modules/mcp-letterwriter.md.
+      LETTER_OUTPUT_DIR: /data/letters
+      LETTER_PUBLIC_BASE_URL: https://${CHAT_DOMAIN}/letters
     volumes:
       - ${DATA_DIR}/letterheads:/data/letterheads:ro
+      # Writable, unlike Caddy's view of the same directory.
+      - ${DATA_DIR}/letters:/data/letters
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s

@@ -29,11 +29,45 @@
 
 # --- The chat application ----------------------------------------------------
 {$CHAT_DOMAIN} {
+	# --- Generated letters ---------------------------------------------------
+	# Serves what the LetterWriter MCP writes, and exists because LibreChat
+	# v0.8.7 does not read `blob` from an MCP embedded resource — it drops the
+	# bytes and hands the model a description of a file nobody can open. So the
+	# MCP writes the .docx here and returns a URL instead. Only present when the
+	# mcp-letterwriter profile is enabled; harmless otherwise, since the
+	# directory is simply empty.
+	#
+	# handle_path strips the /letters prefix, so /letters/<token>/<name>.docx
+	# reads <root>/<token>/<name>.docx.
+	#
+	# ⚠️  Three properties are load-bearing, and none of them announces itself if
+	# it breaks:
+	#
+	#   1. NO `browse`. Directory listing would let anyone enumerate every
+	#      token and therefore every letter. It is off by default — do not
+	#      turn it on, and note that `file_server browse` is a one-word change.
+	#   2. This block must come BEFORE the catch-all `handle`, or the reverse
+	#      proxy takes the request and LibreChat answers 404.
+	#   3. The mount is read-only here. Caddy has no reason to write, and a
+	#      writable public-facing document root is worth never having.
+	#
+	# The URL is a capability — holding it is sufficient to fetch the letter,
+	# with no LibreChat session required. The token is 24 CSPRNG bytes. The
+	# letter's text is already in the conversation that produced it, so the file
+	# exposes nothing that conversation does not. See docs/modules/mcp-letterwriter.md.
+	handle_path /letters/* {
+		root * /srv/letters
+		header Content-Disposition attachment
+		file_server
+	}
+
 	# LibreChat streams responses token by token over Server-Sent Events. Caddy's
 	# reverse proxy passes those through without buffering by default, so no
 	# flush interval or buffering directives are needed here. Adding response
 	# buffering would make every answer appear all at once at the end.
-	reverse_proxy api:3080
+	handle {
+		reverse_proxy api:3080
+	}
 
 	encode zstd gzip
 

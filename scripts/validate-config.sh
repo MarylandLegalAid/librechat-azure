@@ -354,6 +354,48 @@ done
 
 
 # =============================================================================
+group "Generated letters are written, served, and not enumerable"
+# =============================================================================
+# LibreChat v0.8.7 discards `blob` from an MCP embedded resource, so LetterWriter
+# writes the .docx to the data disk and returns a URL that Caddy serves. Four
+# things have to line up, and every one of them fails silently: the letter is
+# generated correctly either way, and the failure only surfaces when somebody
+# clicks a link and gets a 404 — or, worse, gets a directory listing.
+
+lw_out="$(yq -r '.services."letterwriter-mcp".environment.LETTER_OUTPUT_DIR // ""' compose.yaml)"
+lw_url="$(yq -r '.services."letterwriter-mcp".environment.LETTER_PUBLIC_BASE_URL // ""' compose.yaml)"
+if [ -n "$lw_out" ] && [ -n "$lw_url" ]; then
+  pass "letterwriter-mcp has both LETTER_OUTPUT_DIR and LETTER_PUBLIC_BASE_URL"
+else
+  fail "letterwriter-mcp needs BOTH LETTER_OUTPUT_DIR and LETTER_PUBLIC_BASE_URL (got '${lw_out:-unset}' / '${lw_url:-unset}') — the server refuses to start with only one"
+fi
+
+# The URL path Caddy serves must match the one the MCP advertises. A mismatch
+# produces letters that exist on disk and 404 in the browser.
+url_path="${lw_url##*/}"
+if grep -qE "handle_path[[:space:]]+/${url_path}/\*" Caddyfile; then
+  pass "Caddyfile serves /${url_path}/* , matching LETTER_PUBLIC_BASE_URL"
+else
+  fail "LETTER_PUBLIC_BASE_URL ends in '/${url_path}' but the Caddyfile has no 'handle_path /${url_path}/*' — every letter URL would 404"
+fi
+
+# Directory listing would expose every token, and therefore every letter, to
+# anyone who requests the directory. It is one word away at all times.
+if grep -qE '^\s*file_server\s+.*browse' Caddyfile; then
+  fail "Caddyfile enables file_server 'browse' — that lets anyone enumerate every generated letter"
+else
+  pass "Caddyfile does not enable directory browsing"
+fi
+
+# Caddy has no reason to write to a public document root.
+if yaml_array_contains compose.yaml '.services.caddy.volumes' "\${DATA_DIR}/letters:/srv/letters:ro"; then
+  pass "Caddy mounts the letters directory read-only"
+else
+  fail "Caddy's letters mount is missing or not :ro — a writable public document root"
+fi
+
+
+# =============================================================================
 group "Every MCP profile combination renders to valid configuration"
 # =============================================================================
 # The merge deploy.sh performs, for every combination a deployment might run.

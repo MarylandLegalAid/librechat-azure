@@ -161,11 +161,17 @@ write_files:
       # with an EACCES buried in its logs and no other symptom.
       log "creating directories"
       for d in mongo meili_data_v1.35.1 pgvector uploads images logs skill \
-               letterheads caddy/data caddy/config backups migrations; do
+               letterheads letters caddy/data caddy/config backups migrations; do
         mkdir -p "$MOUNT/$d"
       done
       chown -R 1000:1000 "$MOUNT/uploads" "$MOUNT/images" "$MOUNT/logs" "$MOUNT/skill"
       chmod 0755 "$MOUNT/letterheads"
+      # Generated letters. The letterwriter-mcp container writes here as uid 1000
+      # and Caddy reads it, so it must exist before either starts — a bind mount
+      # onto a missing path is created by Docker as root-owned, and the MCP then
+      # fails to write with nothing but an EACCES in its own log.
+      chown -R 1000:1000 "$MOUNT/letters"
+      chmod 0755 "$MOUNT/letters"
 
       # --- The repository --------------------------------------------------
       # Allowed to fail: the key vault is created by the same deployment as
