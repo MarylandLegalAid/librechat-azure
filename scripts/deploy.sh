@@ -17,7 +17,7 @@
 #     4.  rebuild .env from Azure Key Vault
 #     5.  merge librechat.yaml with the storage and MCP overlays
 #     6.  pull images
-#     7.  start containers
+#     7.  start containers, restarting the app if only its config changed
 #     8.  wait for the health endpoint
 #     9.  on failure: roll back to the previous commit and start it again
 #
@@ -250,6 +250,13 @@ bring_up_stack() {
     [ -f "config/mcp/${profile}.yaml" ] && config_layers+=("config/mcp/${profile}.yaml")
   done
 
+  # Remember what the application is currently running, so we can tell whether
+  # this merge actually changed anything. See the restart below for why.
+  local previous_config_checksum=""
+  if [ -f librechat.runtime.yaml ]; then
+    previous_config_checksum="$(sha256sum librechat.runtime.yaml | cut -d' ' -f1)"
+  fi
+
   # `*+`, not `*`. The bare merge REPLACES arrays, so two MCP overlays each
   # contributing one mcpSettings.allowedAddresses entry would end with only the
   # last one — and the other server's every connection would then be refused at
@@ -259,6 +266,13 @@ bring_up_stack() {
        "${config_layers[@]}" > librechat.runtime.yaml; then
     fail "failed to merge ${config_layers[*]}"
     return 1
+  fi
+
+  local config_changed=false
+  if [ -n "$previous_config_checksum" ] \
+     && [ "$(sha256sum librechat.runtime.yaml | cut -d' ' -f1)" != "$previous_config_checksum" ]; then
+    config_changed=true
+    log "the merged config changed"
   fi
 
   # --- 6 & 7. Pull and start ------------------------------------------------
@@ -276,10 +290,39 @@ bring_up_stack() {
     return 1
   fi
 
+  # Which container is serving the app right now, so we can tell afterwards
+  # whether `up -d` replaced it or left it alone.
+  local api_before api_after
+  api_before="$(docker compose "${compose_args[@]}" ps -q api 2>/dev/null || true)"
+
   log "starting containers"
   if ! docker compose "${compose_args[@]}" up -d --remove-orphans; then
     fail "failed to start containers"
     return 1
+  fi
+
+  api_after="$(docker compose "${compose_args[@]}" ps -q api 2>/dev/null || true)"
+
+  # --- 7b. Make a config-only change actually take effect --------------------
+  # LibreChat parses librechat.yaml once, at startup. The merged file is a BIND
+  # MOUNT, so rewriting its contents does not change the container's definition —
+  # and `up -d` only recreates a container whose definition changed. A deploy
+  # whose sole change is configuration therefore leaves the application running,
+  # with the previous configuration still parsed in memory, and reports success.
+  #
+  # That is how the MCP overlay change came to be live on disk and absent from
+  # the running app for seventeen hours: every signal said deployed, the file on
+  # disk was right, and the process had never re-read it.
+  #
+  # Only needed when `up -d` left the same container in place. If it recreated
+  # the container — a new image, a changed variable — the new process has already
+  # read the new file, and restarting again would just add a minute of downtime.
+  if [ "$config_changed" = true ] && [ -n "$api_before" ] && [ "$api_before" = "$api_after" ]; then
+    log "restarting api so it re-reads the configuration"
+    if ! docker compose "${compose_args[@]}" restart api; then
+      fail "failed to restart api after a configuration change"
+      return 1
+    fi
   fi
 }
 
