@@ -404,6 +404,42 @@ done
 
 
 # =============================================================================
+group "deploy.sh re-executes itself as a continuation, not a fresh decision"
+# =============================================================================
+# When an update changes deploy.sh, the running script re-execs the new copy. By
+# then the checkout has already been fast-forwarded, so the replacement process
+# would find PREVIOUS_SHA == CURRENT_SHA, conclude it is already up to date, and
+# exit 0 without deploying anything. It must therefore be handed --force.
+#
+# This shipped without it once. The symptom is the worst kind: the checkout
+# advances, the log says "already up to date; nothing to do", the deploy reports
+# success, and the change never applies — so every commit that touches deploy.sh
+# silently declines to deploy itself. There is no way to catch that in CI by
+# running the script (it wants Docker, a Key Vault and a mounted data disk), so
+# the invariant is asserted directly.
+
+reexec_line="$(grep -n 'exec .*--reexeced' scripts/deploy.sh || true)"
+
+if [ -z "$reexec_line" ]; then
+  fail "deploy.sh has no --reexeced self-exec; if that mechanism was removed on purpose, remove this check too"
+elif ! echo "$reexec_line" | grep -q -- '--force'; then
+  fail "deploy.sh re-execs itself WITHOUT --force — the new process will decide it is already up to date and exit without deploying"
+  echo "      $reexec_line"
+# The original bug passed --force CONDITIONALLY, as
+# $([ "$FORCE" = true ] && echo --force). That still contains the literal
+# --force, so testing only for the flag's presence accepts the broken form —
+# which is exactly the mistake this check exists to catch. Any mention of the
+# FORCE variable on this line means the flag is conditional on how the script was
+# invoked, and the systemd timer never invokes it with --force.
+elif echo "$reexec_line" | grep -q 'FORCE'; then
+  fail "deploy.sh passes --force to its re-exec conditionally, on \$FORCE — the timer never sets that, so a timer-triggered update would advance the checkout and skip the deploy"
+  echo "      $reexec_line"
+else
+  pass "the re-exec passes --force unconditionally (line ${reexec_line%%:*})"
+fi
+
+
+# =============================================================================
 group "DATA_DIR agrees between env.defaults and the Bicep template"
 # =============================================================================
 # cloud-init mounts the disk at the Bicep value; the containers bind-mount from

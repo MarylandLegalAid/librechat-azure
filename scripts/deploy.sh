@@ -131,10 +131,25 @@ fi
 #
 # Re-executing closes both. The lock on file descriptor 9 survives exec, so
 # this does not deadlock against itself, and --reexeced stops it recursing.
+#
+# --force is NOT optional here, and leaving it off was a silent no-deploy bug.
+# Step 3 has already fast-forwarded the checkout, so by the time the replacement
+# process runs its own step 3 there is nothing left to fetch: it reads
+# PREVIOUS_SHA and CURRENT_SHA as the same commit, decides it is already up to
+# date, and exits 0 without ever rendering the config or restarting anything.
+#
+# What that looked like: the checkout on the machine advanced to the new commit,
+# the log said "already up to date; nothing to do", the deploy reported success —
+# and the change never took effect. The next timer run did nothing either,
+# because HEAD genuinely did match by then. So ANY commit that touched this file
+# shipped its own changes and silently declined to apply them.
+#
+# The re-exec is a continuation of a deploy already in progress, not a fresh
+# decision about whether to deploy. That decision was made above.
 if [ "$REEXECED" = false ] && [ "$CURRENT_SHA" != "$PREVIOUS_SHA" ] \
    && ! git diff --quiet "$PREVIOUS_SHA" "$CURRENT_SHA" -- scripts/deploy.sh; then
   log "deploy.sh changed in this update; re-executing the new version"
-  exec "$REPO_ROOT/scripts/deploy.sh" --reexeced $([ "$FORCE" = true ] && echo --force)
+  exec "$REPO_ROOT/scripts/deploy.sh" --reexeced --force
 fi
 
 
