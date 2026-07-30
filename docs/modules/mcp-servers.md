@@ -22,6 +22,24 @@ Why separate repositories rather than a folder in this one: an MCP server that t
 to a case management system is useful to organizations that have that system and have
 never heard of LibreChat. Bundling it here would hide it from them.
 
+**One variable turns a server on in both places at once.** A profile name selects
+both the Compose service that *runs* the server and the `config/mcp/` overlay that
+*declares* it to LibreChat:
+
+```
+COMPOSE_PROFILES=mcp-legalserver
+   ↓
+compose.yaml                       starts the service with that profile
+config/mcp/mcp-legalserver.yaml    is merged into librechat.runtime.yaml
+```
+
+That is deliberate, and it is worth knowing why. `mcpServers` used to sit directly in
+`librechat.yaml`, where it was declared unconditionally — so an instance running no MCP
+servers at all still spent about **60 seconds at startup trying to reach containers that
+were not there**, logging connection errors throughout. The app came up fine, but "it
+works, ignore the errors" is a bad default to ship, and it teaches an operator to ignore
+the logs they should be reading.
+
 ## Turning one on
 
 ```bash
@@ -58,10 +76,10 @@ Without an explicit exemption, every connection attempt fails with
 `Domain ... is not allowed`.
 
 ```yaml
+# config/mcp/mcp-legalserver.yaml
 mcpSettings:
   allowedAddresses:
     - "legalserver-mcp:3001"
-    - "letterwriter-mcp:3002"
 
 mcpServers:
   LegalServer:
@@ -73,8 +91,17 @@ Use `allowedAddresses` — host and port, no scheme. **Not** `allowedDomains`, w
 switches the field into a strict whitelist mode that blocks every public destination
 you did not also list.
 
-`scripts/validate-config.sh` checks that every `mcpServers` URL has a matching
-`allowedAddresses` entry and a matching Compose service. It runs in CI.
+Keep each server's allow-list entry **in its own overlay**, next to the `mcpServers`
+entry that needs it, rather than collecting them all in one place. `deploy.sh` merges
+the overlays with `yq`'s `*+` operator, which *appends* arrays — so the entries
+accumulate as profiles are enabled. (With the bare `*`, arrays are *replaced*, and
+enabling a second server would silently delete the first one's allow-list entry.)
+
+`scripts/validate-config.sh` checks all of this in CI: that every `mcpServers` URL has
+a matching `allowedAddresses` entry in the same overlay, that its host is a real
+service in `compose.yaml`, that the service carries **the profile the overlay file is
+named after**, and that every combination of profiles still merges to a config where
+each declared server is in the allow list.
 
 ## Writing your own
 
@@ -113,7 +140,7 @@ yourtool-mcp:
 ```
 
 ```yaml
-# librechat.yaml
+# config/mcp/mcp-yourtool.yaml — the filename must match the profile above
 mcpSettings:
   allowedAddresses:
     - "yourtool-mcp:3003"        # do not forget this
@@ -128,6 +155,10 @@ mcpServers:
 
 Then add `mcp-yourtool` to `COMPOSE_PROFILES`, and add the new variables to
 `.env.example` so the next person knows they exist.
+
+Run `./scripts/validate-config.sh` before you push. It will tell you if the overlay
+name and the Compose profile have drifted apart, which is the mistake this convention
+exists to catch and the one that is hardest to spot by reading.
 
 ### Things worth knowing
 

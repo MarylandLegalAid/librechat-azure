@@ -1,0 +1,32 @@
+# LegalServer MCP tools.
+#
+# Merged over librechat.yaml by scripts/deploy.sh when COMPOSE_PROFILES contains
+# `mcp-legalserver`. The filename IS the profile name — that is the whole
+# mechanism. See config/mcp/README.md.
+#
+# {{LIBRECHAT_USER_EMAIL}} is LibreChat's built-in placeholder for YAML-defined
+# remote MCP servers. It forwards the signed-in user's email so current-user
+# LegalServer tools (my tasks / my calendar / my matters) can scope to them.
+#
+# ⚠️  allowedAddresses is not optional. v0.8.7 blocks SSRF targets — including
+# private and internal hostnames — for MCP server URLs, and a Docker Compose
+# service name IS an internal hostname. Without this exemption every connection
+# fails with "Domain ... is not allowed". Use allowedAddresses (host:port, no
+# scheme), NOT allowedDomains, which is a strict whitelist-everything-else-
+# blocked mode we do not want.
+
+mcpSettings:
+  allowedAddresses:
+    - "legalserver-mcp:3001"
+
+mcpServers:
+  LegalServer:
+    type: streamable-http
+    # /legalserver/mcp is this image's canonical path. It also serves /mcp as a
+    # legacy alias; prefer the canonical one so a future removal of the alias
+    # does not break this deployment.
+    url: http://legalserver-mcp:3001/legalserver/mcp
+    headers:
+      X-LegalServer-User-Email: "{{LIBRECHAT_USER_EMAIL}}"
+    description: "Read-only LegalServer matter, document, and discovery tools"
+    chatMenu: true

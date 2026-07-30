@@ -1,0 +1,19 @@
+# LetterWriter MCP tool.
+#
+# Merged over librechat.yaml by scripts/deploy.sh when COMPOSE_PROFILES contains
+# `mcp-letterwriter`. The filename IS the profile name — that is the whole
+# mechanism. See config/mcp/README.md.
+#
+# ⚠️  allowedAddresses is not optional — see the explanation in
+# config/mcp/mcp-legalserver.yaml.
+
+mcpSettings:
+  allowedAddresses:
+    - "letterwriter-mcp:3002"
+
+mcpServers:
+  LetterWriter:
+    type: streamable-http
+    url: http://letterwriter-mcp:3002/letter-writer/mcp
+    description: "Create DOCX letters on organization letterhead"
+    chatMenu: true

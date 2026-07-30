@@ -15,7 +15,7 @@
 #     2.  remember the current commit, for rollback
 #     3.  fast-forward to origin/main; stop here if nothing changed
 #     4.  rebuild .env from Azure Key Vault
-#     5.  merge librechat.yaml with the storage overlay
+#     5.  merge librechat.yaml with the storage and MCP overlays
 #     6.  pull images
 #     7.  start containers
 #     8.  wait for the health endpoint
@@ -177,6 +177,21 @@ bring_up_stack() {
   data_dir="${data_dir:-/srv/librechat/data}"
   compose_profiles="$(env_value COMPOSE_PROFILES)"
 
+  # The enabled optional services, as a list, with any repeats removed. Used
+  # twice below — once to choose config overlays and once to tell Compose what
+  # to start — because those two must always agree. Repeats are dropped because
+  # a profile named twice would otherwise have its overlay merged twice, and an
+  # appended array (see the merge below) would gain a duplicate entry.
+  local -a profiles=()
+  local profile already seen
+  for profile in $(echo "$compose_profiles" | tr ',' ' '); do
+    already=false
+    for seen in "${profiles[@]}"; do
+      [ "$seen" = "$profile" ] && already=true
+    done
+    [ "$already" = false ] && profiles+=("$profile")
+  done
+
   local storage_config="config/storage/${file_storage}.yaml"
   local storage_compose="compose.storage.${file_storage}.yml"
 
@@ -201,24 +216,41 @@ bring_up_stack() {
   fi
 
   # --- 5. Assemble the runtime config --------------------------------------
-  # fileStrategy cannot be an environment variable — LibreChat parses it as a
-  # zod enum and does not interpolate ${VAR} into that key. So the choice is
-  # baked in here, before the application ever reads the file.
-  # config/storage/README.md explains this at length.
-  log "merging librechat.yaml with $storage_config"
-  if ! yq eval-all '. as $item ireduce ({}; . * $item)' \
-       librechat.yaml "$storage_config" > librechat.runtime.yaml; then
-    fail "failed to merge librechat.yaml with $storage_config"
+  # The base config plus one storage overlay plus one overlay per enabled MCP
+  # profile. Two separate reasons the config cannot simply be a static file:
+  #
+  #   - fileStrategy cannot be an environment variable. LibreChat parses it as a
+  #     zod enum and does not interpolate ${VAR} into that key, so the choice has
+  #     to be baked in before the application ever reads the file.
+  #     config/storage/README.md explains this at length.
+  #   - An MCP server declared while its container is not running costs ~60s of
+  #     failed connections at every startup. So a server is declared only when
+  #     its profile is on. config/mcp/README.md explains this at length.
+  local -a config_layers=(librechat.yaml "$storage_config")
+
+  for profile in "${profiles[@]}"; do
+    # The overlay is named after the profile. A profile with no file here is
+    # skipped rather than refused: profiles are a general Compose feature and
+    # need not all be MCP servers.
+    [ -f "config/mcp/${profile}.yaml" ] && config_layers+=("config/mcp/${profile}.yaml")
+  done
+
+  # `*+`, not `*`. The bare merge REPLACES arrays, so two MCP overlays each
+  # contributing one mcpSettings.allowedAddresses entry would end with only the
+  # last one — and the other server's every connection would then be refused at
+  # request time, with nothing wrong at startup to hint at why. `+` appends.
+  log "merging config: ${config_layers[*]}"
+  if ! yq eval-all '. as $item ireduce ({}; . *+ $item)' \
+       "${config_layers[@]}" > librechat.runtime.yaml; then
+    fail "failed to merge ${config_layers[*]}"
     return 1
   fi
 
   # --- 6 & 7. Pull and start ------------------------------------------------
   local -a compose_args=(-f compose.yaml -f "$storage_compose")
-  if [ -n "$compose_profiles" ]; then
-    log "optional services: $compose_profiles"
-    local profile
-    # shellcheck disable=SC2001
-    for profile in $(echo "$compose_profiles" | tr ',' ' '); do
+  if [ "${#profiles[@]}" -gt 0 ]; then
+    log "optional services: ${profiles[*]}"
+    for profile in "${profiles[@]}"; do
       compose_args+=(--profile "$profile")
     done
   fi

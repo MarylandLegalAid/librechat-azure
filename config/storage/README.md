@@ -21,9 +21,18 @@ So the choice has to be made *before* LibreChat reads the file. That is what the
 in `scripts/deploy.sh` does:
 
 ```bash
-yq eval-all '. as $item ireduce ({}; . * $item)' \
+yq eval-all '. as $item ireduce ({}; . *+ $item)' \
   librechat.yaml config/storage/${FILE_STORAGE}.yaml > librechat.runtime.yaml
 ```
+
+Alongside this one, `deploy.sh` merges an overlay from `config/mcp/` for each enabled
+Compose profile — same mechanism, different reason. See `config/mcp/README.md`.
+
+**Note `*+` rather than `*`.** The `+` appends arrays instead of replacing them, which
+the MCP overlays depend on. The storage overlays set a single scalar, so it makes no
+difference to them today — but it means **an array in an overlay is added to the base,
+never a replacement for it.** If a future storage mode needs to replace an array, that
+has to happen in `librechat.yaml`, not here.
 
 `librechat.runtime.yaml` is what gets bind-mounted into the container. It is gitignored —
 it is a build artifact, not a source file.

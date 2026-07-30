@@ -273,28 +273,134 @@ fi
 
 
 # =============================================================================
-group "MCP servers are reachable through the SSRF allow list"
+group "MCP overlays are self-consistent and match their Compose profiles"
 # =============================================================================
-# v0.8.7 blocks internal hostnames for MCP URLs by default. A Compose service
-# name IS an internal hostname, so an mcpServers entry without a matching
-# mcpSettings.allowedAddresses line fails every connection at runtime.
+# Each config/mcp/<profile>.yaml is merged in only when <profile> is listed in
+# COMPOSE_PROFILES, so a server is declared exactly when it is running. Three
+# things can be wrong here, none of which fails at startup:
+#
+#   - v0.8.7 blocks internal hostnames for MCP URLs by default, and a Compose
+#     service name IS an internal hostname. An mcpServers entry without a
+#     matching mcpSettings.allowedAddresses line fails every connection.
+#   - The URL's host may not be a service in compose.yaml at all.
+#   - The service may be a real service carrying a DIFFERENT profile — so the
+#     overlay is merged while the container is not running, or the other way
+#     round. This is the failure the filename convention exists to prevent, and
+#     it is invisible until someone tries to use the tool.
 
-while IFS= read -r url; do
-  [ -n "$url" ] || continue
-  hostport="$(echo "$url" | sed -E 's#^https?://([^/]+).*#\1#')"
-  if yaml_array_contains librechat.yaml '.mcpSettings.allowedAddresses' "$hostport"; then
-    pass "mcpServers URL $hostport is in mcpSettings.allowedAddresses"
-  else
-    fail "mcpServers URL $hostport is NOT in mcpSettings.allowedAddresses — every connection would be refused"
+# How many MCP servers a file declares. `// {}` so a file with no mcpServers key
+# counts as zero rather than producing "null".
+mcp_server_count() { yq -r '.mcpServers // {} | length' "$1"; }
+
+# The base config must NOT declare MCP servers itself. One left behind there
+# would be declared unconditionally, which is the whole thing this arrangement
+# is for.
+if [ "$(mcp_server_count librechat.yaml)" != "0" ]; then
+  fail "librechat.yaml declares mcpServers — those belong in config/mcp/<profile>.yaml; see config/mcp/README.md"
+else
+  pass "librechat.yaml declares no mcpServers of its own"
+fi
+
+shopt -s nullglob
+MCP_OVERLAYS=(config/mcp/*.yaml)
+shopt -u nullglob
+
+[ "${#MCP_OVERLAYS[@]}" -gt 0 ] || fail "config/mcp/ has no overlays at all"
+
+for overlay in "${MCP_OVERLAYS[@]}"; do
+  profile="$(basename "$overlay" .yaml)"
+
+  if [ "$(mcp_server_count "$overlay")" = "0" ]; then
+    fail "$profile: the overlay declares no mcpServers"
+    continue
   fi
 
-  service="${hostport%%:*}"
-  if yq -e ".services.\"$service\"" compose.yaml >/dev/null 2>&1; then
-    pass "mcpServers host '$service' is a Compose service"
-  else
-    fail "mcpServers host '$service' has no matching service in compose.yaml"
+  while IFS= read -r url; do
+    [ -n "$url" ] || continue
+    hostport="$(echo "$url" | sed -E 's#^https?://([^/]+).*#\1#')"
+    service="${hostport%%:*}"
+
+    if yaml_array_contains "$overlay" '.mcpSettings.allowedAddresses' "$hostport"; then
+      pass "$profile: $hostport is in its own mcpSettings.allowedAddresses"
+    else
+      fail "$profile: $hostport is NOT in mcpSettings.allowedAddresses — every connection would be refused"
+    fi
+
+    if ! yq -e ".services.\"$service\"" compose.yaml >/dev/null 2>&1; then
+      fail "$profile: host '$service' has no matching service in compose.yaml"
+    elif yaml_array_contains compose.yaml ".services.\"$service\".profiles" "$profile"; then
+      pass "$profile: service '$service' carries profile '$profile'"
+    else
+      fail "$profile: service '$service' exists but does not carry profile '$profile' — the overlay and the container would be enabled by different variables"
+    fi
+  done < <(yq -r '.mcpServers[]?.url' "$overlay")
+done
+
+
+# =============================================================================
+group "Every MCP profile combination renders to valid configuration"
+# =============================================================================
+# The merge deploy.sh performs, for every combination a deployment might run.
+# `*+` appends arrays rather than replacing them: with the bare `*`, two
+# overlays each contributing one allowedAddresses entry would leave only the
+# last, and the other server would be silently unreachable.
+
+for profiles in "${PROFILE_SETS[@]}"; do
+  layers=(librechat.yaml config/storage/disk.yaml)
+  label="${profiles:-no profiles}"
+  expected=0
+
+  if [ -n "$profiles" ]; then
+    IFS=',' read -r -a profile_list <<< "$profiles"
+    for profile in "${profile_list[@]}"; do
+      overlay="config/mcp/${profile}.yaml"
+      if [ -f "$overlay" ]; then
+        layers+=("$overlay")
+        expected=$((expected + $(mcp_server_count "$overlay")))
+      fi
+    done
   fi
-done < <(yq -r '.mcpServers[]?.url' librechat.yaml)
+
+  out="$(mktemp)"
+  if ! yq eval-all '. as $item ireduce ({}; . *+ $item)' "${layers[@]}" > "$out" 2>/dev/null; then
+    fail "$label: the yq merge failed"
+    rm -f "$out"
+    continue
+  fi
+
+  # Every declared server's host:port must be in the merged allow list. This is
+  # what the append flag is protecting, so assert it on the merged result rather
+  # than trusting that deploy.sh still carries the flag.
+  merge_ok=true
+  while IFS= read -r url; do
+    [ -n "$url" ] || continue
+    hostport="$(echo "$url" | sed -E 's#^https?://([^/]+).*#\1#')"
+    if ! yaml_array_contains "$out" '.mcpSettings.allowedAddresses' "$hostport"; then
+      fail "$label: $hostport is declared but absent from the merged allowedAddresses — either its overlay is missing the entry, or the merge is replacing arrays instead of appending them"
+      merge_ok=false
+    fi
+  done < <(yq -r '.mcpServers[]?.url' "$out")
+
+  # Every server the selected overlays declare must survive the merge. A map
+  # merge does not lose keys, so this is really a guard against two overlays
+  # declaring the SAME server name, where the second would overwrite the first.
+  declared="$(mcp_server_count "$out")"
+
+  if [ "$declared" != "$expected" ]; then
+    fail "$label: expected $expected declared MCP server(s), found $declared"
+    merge_ok=false
+  fi
+
+  # With no MCP profile on, the app must see no mcpServers key at all — that is
+  # what removes the 60 seconds of failed connections at startup.
+  if [ -z "$profiles" ] && [ "$(yq -r 'has("mcpServers")' "$out")" != "false" ]; then
+    fail "no profiles: the merged config still has an mcpServers key"
+    merge_ok=false
+  fi
+
+  [ "$merge_ok" = true ] && pass "$label: $declared MCP server(s) declared, all in the allow list"
+  rm -f "$out"
+done
 
 
 # =============================================================================

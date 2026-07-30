@@ -5,15 +5,24 @@
 #
 # THIS FILE IS NOT WHAT THE CONTAINER READS.
 #
-# scripts/deploy.sh merges this file with one storage overlay from
-# config/storage/ and writes the result to librechat.runtime.yaml, which is what
-# gets bind-mounted into the api container. The only difference between the two
-# is the file-storage strategy — see config/storage/README.md for why that one
-# key cannot simply be an environment variable.
+# scripts/deploy.sh merges this file with two kinds of overlay and writes the
+# result to librechat.runtime.yaml, which is what gets bind-mounted into the api
+# container:
 #
-# To see exactly what your deployment will run:
+#   config/storage/<FILE_STORAGE>.yaml   exactly one, always
+#   config/mcp/<profile>.yaml            one per profile in COMPOSE_PROFILES
 #
-#   FILE_STORAGE=disk ./scripts/render-config.sh && cat librechat.runtime.yaml
+# Both exist because the key they set cannot be driven from the environment at
+# runtime: fileStrategy is parsed as a zod enum with no ${VAR} interpolation
+# (config/storage/README.md), and an mcpServers entry present while its
+# container is not running costs ~60s of failed connections at every startup
+# (config/mcp/README.md).
+#
+# To see exactly what your deployment will run, with the same command deploy.sh
+# uses — note `*+`, which appends arrays rather than replacing them:
+#
+#   yq eval-all '. as $item ireduce ({}; . *+ $item)' \
+#     librechat.yaml config/storage/disk.yaml config/mcp/mcp-legalserver.yaml
 #
 # =============================================================================
 
@@ -297,49 +306,29 @@ fileConfig:
       - "^audio/(mp3|mpeg|mpeg3|wav|wave|x-wav|ogg|vorbis|mp4|x-m4a|flac|x-flac|webm)$"
 
 # =============================================================================
-# MCP tool servers
+# MCP tool servers — deliberately NOT configured here
 # =============================================================================
+# There is no `mcpServers` block in this file, and that is on purpose.
+#
 # Each MCP server is its own public repository publishing its own container
-# image; this stack consumes pinned tags. Each is behind a Compose profile and is
-# off unless you list it in COMPOSE_PROFILES — see docs/modules/mcp-servers.md.
+# image; this stack consumes pinned tags, one Compose service per server, each
+# behind a Compose profile that is off by default. Declaring the servers here
+# would declare them unconditionally — so an instance running none of them (a
+# grantee's, out of the box) would spend about 60 seconds at startup trying to
+# reach containers that do not exist, logging connection errors throughout.
 #
-# {{LIBRECHAT_USER_EMAIL}} is LibreChat's built-in placeholder for YAML-defined
-# remote MCP servers. It forwards the signed-in user's email so current-user
-# LegalServer tools (my tasks / my calendar / my matters) can scope to them.
+# So each server's `mcpServers` entry and its `mcpSettings.allowedAddresses`
+# line live together in config/mcp/<profile>.yaml, and scripts/deploy.sh merges
+# in only the overlays whose profiles are listed in COMPOSE_PROFILES. One
+# variable turns a server on in both places at once, so the two cannot disagree.
 #
-# Neither server is exposed publicly. They are reachable only on the Compose
-# network, and that is the trust boundary. Both images support an optional
-# shared-secret header (MCP_SHARED_SECRET) that no-ops when unset; it is
-# deliberately left unset here, stated explicitly so the assumption is visible
+# Neither of MLA's servers is exposed publicly. They are reachable only on the
+# Compose network, and that is the trust boundary. Both images support an
+# optional shared-secret header (MCP_SHARED_SECRET) that no-ops when unset; it
+# is deliberately left unset, stated explicitly so the assumption is visible
 # rather than accidental. Set it if you ever move an MCP off this host.
 #
-# ⚠️  v0.8.7 blocks SSRF targets (including private and internal hostnames) for
-# MCP server URLs by default. Docker Compose service names ARE internal
-# hostnames, so without the mcpSettings.allowedAddresses exemption below, every
-# connection attempt fails with "Domain ... is not allowed". Use
-# allowedAddresses (host:port, no scheme) — NOT allowedDomains, which is a
-# strict whitelist-everything-else-blocked mode we do not want.
-mcpSettings:
-  allowedAddresses:
-    - "legalserver-mcp:3001"
-    - "letterwriter-mcp:3002"
-
-mcpServers:
-  LegalServer:
-    type: streamable-http
-    # /legalserver/mcp is this image's canonical path. It also serves /mcp as a
-    # legacy alias; prefer the canonical one so a future removal of the alias
-    # does not break this deployment.
-    url: http://legalserver-mcp:3001/legalserver/mcp
-    headers:
-      X-LegalServer-User-Email: "{{LIBRECHAT_USER_EMAIL}}"
-    description: "Read-only LegalServer matter, document, and discovery tools"
-    chatMenu: true
-  LetterWriter:
-    type: streamable-http
-    url: http://letterwriter-mcp:3002/letter-writer/mcp
-    description: "Create DOCX letters on organization letterhead"
-    chatMenu: true
+# See config/mcp/README.md and docs/modules/mcp-servers.md.
 
 # =============================================================================
 # Memory (personalization)
