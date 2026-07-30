@@ -92,6 +92,52 @@ interpreter** — otherwise users get a "Run Code" button that fails.
 
 ## Checking it works
 
+### First, before opening the app at all
+
+The likeliest thing to be wrong is a **key mismatch**: LibreChat holding a private key
+whose public half is not the one the interpreter trusts. It fails only when a user
+clicks Run Code, and it fails as an opaque authentication error.
+
+You do not need to run anything to rule that out. Compare the two halves directly —
+the private key stays in a variable and is never printed:
+
+```bash
+V=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
+
+PRIV="$(az keyvault secret show --vault-name "$V" -n CODEAPI-JWT-PRIVATE-JWK-JSON --query value -o tsv)" \
+python3 - <<'PY'
+import base64, json, os, urllib.request
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
+
+priv = json.loads(os.environ['PRIV'])
+b64d = lambda s: base64.urlsafe_b64decode(s + '=' * (-len(s) % 4))
+b64e = lambda b: base64.urlsafe_b64encode(b).rstrip(b'=').decode()
+
+derived = b64e(Ed25519PrivateKey.from_private_bytes(b64d(priv['d'])).public_key()
+               .public_bytes(encoding=serialization.Encoding.Raw,
+                             format=serialization.PublicFormat.Raw))
+
+# Your interpreter's published JWKS. Adjust the path if yours differs.
+url = os.environ.get('JWKS_URL', 'https://code.example.org/v1/.well-known/jwks.json')
+with urllib.request.urlopen(url, timeout=20) as r:
+    keys = json.load(r).get('keys', [])
+
+trusted = next((k for k in keys if k.get('kid') == priv['kid']), None)
+if trusted is None:
+    raise SystemExit(f"FAIL: the interpreter trusts no key with kid {priv['kid']}")
+print("OK: key pair confirmed" if trusted['x'] == derived == priv['x']
+      else "FAIL: the private key does not pair with the trusted public key")
+PY
+```
+
+If the interpreter does not publish a JWKS endpoint, compare against whatever secret
+holds its public set instead — the assertion is the same: the `x` in the trusted public
+key, the `x` in the private JWK, and the `x` derived from the private `d` must all be
+identical, for a `kid` the interpreter actually lists.
+
+### Then, in the app
+
 - [ ] Ask for a chart from a small dataset. You should get an image back.
 - [ ] Upload a CSV and ask for a summary. Confirm the file reaches the sandbox.
 - [ ] Ask it to fetch a URL. It should **fail** — the sandbox has no internet access,
