@@ -66,7 +66,7 @@ test('validateModelMap rejects a target that is not approved', () => {
 });
 
 test('validateModelMap rejects an approved model used as a migration source', () => {
-  const bad = { 'gpt-5.4-nano': { model: 'gpt-5.6-luna', provider: 'openAI' } };
+  const bad = { 'claude-haiku-4-5': { model: 'gpt-5.6-luna', provider: 'openAI' } };
   const problems = validateModelMap(bad, APPROVED_MODELS);
   assert.strictEqual(problems.length, 1);
   assert.match(problems[0], /must not also be a migration source/);
@@ -85,7 +85,7 @@ test('parseModelMap rejects an entry missing its provider', () => {
 
 test('an agent already on an approved model is left completely alone', () => {
   const plan = planAgentChanges(
-    agent({ model: 'gpt-5.4-nano', provider: 'openAI' }),
+    agent({ model: 'claude-haiku-4-5', provider: 'anthropic' }),
     OPTS,
   );
   assert.strictEqual(plan.skipped, true);
@@ -93,15 +93,22 @@ test('an agent already on an approved model is left completely alone', () => {
   assert.deepStrictEqual(plan.set, {});
 });
 
-test('an approved-model agent keeps provider openAI even though gpt-5.6 moved', () => {
-  // This is the case that makes the "gate on top-level model" rule matter: the
-  // built-in openAI endpoint really does serve gpt-5.4-nano, so these five
-  // agents must NOT be dragged onto the custom endpoint with the others.
+test('retiring gpt-5.4-nano turns its five agents into ordinary migration targets', () => {
+  // Until 2026-07-30 this was the opposite test: nano was approved, so these
+  // agents had to be LEFT on the built-in openAI endpoint. Retiring nano deleted
+  // that endpoint, and the only thing that had to change to move them was the
+  // approved list — no code, which is the point of keeping the gate data-driven.
   const plan = planAgentChanges(
     agent({ model: 'gpt-5.4-nano', provider: 'openAI', versions: [{ model: 'gpt-5.4-nano', provider: 'openAI' }] }),
     OPTS,
   );
-  assert.strictEqual(plan.skipped, true);
+  assert.strictEqual(plan.skipped, false);
+  assert.strictEqual(plan.set.model, 'gpt-5.6-luna');
+  assert.strictEqual(plan.set.provider, 'OpenAI GPT-5.6 Responses');
+  // History moves too, or a revert puts the agent back on a retired model served
+  // by an endpoint that no longer exists.
+  assert.strictEqual(plan.set['versions.0.model'], 'gpt-5.6-luna');
+  assert.strictEqual(plan.set['versions.0.provider'], 'OpenAI GPT-5.6 Responses');
   assert.deepStrictEqual(plan.warnings, []);
 });
 
@@ -137,9 +144,9 @@ test('an approved-model agent still has its history repaired, top level untouche
 test('an approved-model agent with clean history is skipped entirely', () => {
   const plan = planAgentChanges(
     agent({
-      model: 'gpt-5.4-nano',
-      provider: 'openAI',
-      versions: [{ model: 'gpt-5.4-nano', provider: 'openAI' }],
+      model: 'claude-haiku-4-5',
+      provider: 'anthropic',
+      versions: [{ model: 'claude-haiku-4-5', provider: 'anthropic' }],
     }),
     OPTS,
   );
@@ -220,7 +227,7 @@ test('version entries already on an approved model are not rewritten', () => {
     agent({
       model: 'gpt-5.2',
       provider: 'openAI',
-      versions: [{ model: 'gpt-5.4-nano', provider: 'openAI' }],
+      versions: [{ model: 'gpt-5.6-luna', provider: 'OpenAI GPT-5.6 Responses' }],
     }),
     OPTS,
   );
@@ -338,10 +345,12 @@ test('the production distribution produces exactly the expected plan', () => {
 
   assert.strictEqual(fleet.length, 24);
 
-  // "Referral Bot": on an approved model, but 22 snapshots on retired ones.
-  // Present in the fixture because it is present in production — without it this
-  // test would keep predicting 18/6 while the real dry run reported 19/5, and the
-  // whole point of mirroring the fleet here is that it cannot drift.
+  // "Referral Bot": 22 snapshots on retired models. Until nano was retired it was
+  // the fleet's only history-only case — on an approved model with a broken past.
+  // Retiring nano moved its top-level model too, so it is now an ordinary change
+  // and the fleet has no history-only agents left. Kept in the fixture because it
+  // is the agent with the most version history in production, and because that
+  // history is where the volume of writes actually comes from.
   fleet[0].name = 'Referral Bot';
   fleet[0].versions = [
     ...Array.from({ length: 17 }, () => ({ model: 'gpt-5-mini', provider: 'openAI' })),
@@ -353,20 +362,24 @@ test('the production distribution produces exactly the expected plan', () => {
   const summary = summarize(plans);
 
   assert.strictEqual(summary.agentsTotal, 24);
-  // 18 agents move their current model; Referral Bot's history alone is repaired.
-  assert.strictEqual(summary.agentsChanged, 19);
-  assert.strictEqual(summary.agentsSkipped, 5);
-  assert.strictEqual(summary.agentsHistoryOnly, 1);
+  // Every agent moves its current model except the single claude-haiku-4-5 one.
+  // Retiring gpt-5.4-nano took this from 19/5/1 to 23/1/0: the five nano agents
+  // became ordinary targets, and Referral Bot — previously the lone history-only
+  // case — now moves its top-level model like everything else.
+  assert.strictEqual(summary.agentsChanged, 23);
+  assert.strictEqual(summary.agentsSkipped, 1);
+  assert.strictEqual(summary.agentsHistoryOnly, 0);
 
-  assert.strictEqual(summary.byTarget['gpt-5.6-luna'].count, 9);
+  // 14 = 5 nano + 5 gpt-5.4-mini + 3 gpt-4.1 + 1 gpt-5-mini
+  assert.strictEqual(summary.byTarget['gpt-5.6-luna'].count, 14);
   assert.strictEqual(summary.byTarget['gpt-5.6-terra'].count, 6);
   assert.strictEqual(summary.byTarget['claude-opus-5'].count, 3);
   assert.ok(!summary.byTarget['gpt-5.6-sol'], 'gpt-5.6-sol is approved but is not a target');
 
-  // 15 agents move onto the custom endpoint; 3 Anthropic agents change model
-  // only; 6 are untouched.
+  // 20 agents move onto the custom endpoint (14 luna + 6 terra); the 3 Anthropic
+  // agents change model only; 1 is untouched.
   const providerChanges = plans.filter((plan) =>
     plan.changes.some((c) => c.field === 'provider'),
   );
-  assert.strictEqual(providerChanges.length, 15);
+  assert.strictEqual(providerChanges.length, 20);
 });

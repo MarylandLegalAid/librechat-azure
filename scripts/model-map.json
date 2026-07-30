@@ -30,7 +30,15 @@
     "Note that gpt-5.1 maps to luna rather than to terra, where the other",
     "plain-numbered models go. Specified by John on 2026-07-30; recorded here",
     "because it is a deliberate exception to the same-tier rule above, and a",
-    "future reader comparing the rows would otherwise read it as a mistake."
+    "future reader comparing the rows would otherwise read it as a mistake.",
+    "",
+    "2026-07-30, later: gpt-5.4-nano is RETIRED. OpenAI dropped gpt-5.6-luna to",
+    "essentially nano's price, so nano no longer earns its place, and it was the",
+    "only model the built-in `openAI` endpoint served — retiring it let that",
+    "endpoint be deleted outright, which removes the bypass route §11.4 part 3",
+    "previously had to hide. Both nano rows therefore target luna on the custom",
+    "endpoint, and gpt-5.4-nano is gone from the approved list, which is what",
+    "turns the five agents sitting on it into migration targets."
   ],
 
   "claude-opus-4-7":   { "model": "claude-opus-5",   "provider": "anthropic" },
@@ -44,5 +52,6 @@
   "gpt-4.1":           { "model": "gpt-5.6-luna",    "provider": "OpenAI GPT-5.6 Responses" },
   "gpt-5.1":           { "model": "gpt-5.6-luna",    "provider": "OpenAI GPT-5.6 Responses" },
   "gpt-4.1-mini":      { "model": "gpt-5.6-luna",    "provider": "OpenAI GPT-5.6 Responses" },
-  "gpt-5-nano":        { "model": "gpt-5.4-nano",    "provider": "openAI" }
+  "gpt-5-nano":        { "model": "gpt-5.6-luna",    "provider": "OpenAI GPT-5.6 Responses" },
+  "gpt-5.4-nano":      { "model": "gpt-5.6-luna",    "provider": "OpenAI GPT-5.6 Responses" }
 }

@@ -48,8 +48,8 @@ In `librechat.yaml`:
 
 ```yaml
 endpoints:
-  openAI:
-    titleModel: "gpt-5.4-nano"      # built-in endpoint stays, for titles and memory
+  # No `openAI:` block. The built-in endpoint was retired on 2026-07-30 — see
+  # part 2 below. Titles and the memory agent moved onto the custom endpoint.
   custom:
     - name: "OpenAI GPT-5.6 Responses"
       apiKey: "${OPENAI_API_KEY}"
@@ -57,7 +57,8 @@ endpoints:
       models:
         default: ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"]
         fetch: false
-      titleConvo: false
+      titleConvo: true                # MUST be true — see "Titles" below
+      titleModel: "gpt-5.6-luna"
       summarize: false
       modelDisplayLabel: "OpenAI"
       addParams:
@@ -68,16 +69,35 @@ endpoints:
 `useResponsesApi: false` gets the Responses API anyway. That is the property that
 makes this policy rather than a default.
 
-### 2. GPT-5.6 excluded from `OPENAI_MODELS`
+### 2. The built-in `openAI` endpoint does not exist
 
-In `env.defaults`:
+`env.defaults` sets no `OPENAI_MODELS` at all, and `librechat.yaml` declares no
+`endpoints.openAI`.
 
-```
-OPENAI_MODELS=gpt-5.4-nano
-```
+This used to be a weaker rule: the endpoint stayed configured with a single model,
+`gpt-5.4-nano`, for chat titles and the memory agent, and GPT-5.6 was merely kept
+out of `OPENAI_MODELS`. On 2026-07-30 OpenAI cut `gpt-5.6-luna` to roughly nano's
+price; nano was retired, the endpoint had nothing left to do, and it was deleted.
 
-One model. If a GPT-5.6 model appeared in this list, the built-in endpoint could
-serve it — over chat completions, with the bug.
+That is stronger than excluding models from a list. **An endpoint that does not
+exist cannot be bypassed to.** `validate-config.sh` asserts both halves and fails
+the build if either reappears.
+
+### Titles
+
+`titleConvo: true` on the custom endpoint is load-bearing, and it was `false` for
+one day in July 2026 with consequences worth recording.
+
+`api/server/services/Endpoints/agents/title.js` early-returns on
+`client.options.titleConvo === false` — no fallback to `titleModel`, no delegation
+to another endpoint. With it false, **every conversation on every agent using this
+endpoint was silently saved as "New Chat"**.
+
+The reason it survived a smoke test: **direct chats on this endpoint titled
+correctly the whole time.** The non-agent code path does not consult the flag. Only
+agents were affected, so a model-by-model check passes while most agents quietly
+lose their titles. `titleEndpoint` exists in `librechat-data-provider`'s types but
+is not referenced by the API server, so it cannot be used to delegate titling.
 
 ### 3. The built-in endpoint is not selectable
 

@@ -9,8 +9,12 @@ at, which needs a migration.
 
 ```
 ANTHROPIC_MODELS=claude-opus-5,claude-sonnet-5,claude-haiku-4-5
-OPENAI_MODELS=gpt-5.4-nano
 ```
+
+There is no `OPENAI_MODELS`. The built-in `openAI` endpoint was retired on
+2026-07-30, so OpenAI models are listed on the custom endpoint in
+`librechat.yaml` instead — see
+[GPT-5.6 and the Responses API](models-gpt56-responses.md).
 
 Add the identifier, commit, push. It appears in every user's dropdown within five
 minutes.
@@ -24,9 +28,11 @@ Two things to check first:
    real family of models that break in a specific way on the default endpoint, and
    the pattern for handling any model with its own API requirements.
 
-!!! warning "`OPENAI_MODELS` contains one model, deliberately"
-    It is not a truncated list. Adding a GPT-5.6 model to it reintroduces a bug that
-    only appears when a tool is used. Read the page above first.
+!!! warning "Do not reintroduce `OPENAI_MODELS`"
+    Setting it resurrects the built-in `openAI` endpoint, which does not force the
+    Responses API — reintroducing a bug that only appears when a tool is used. OpenAI
+    models belong on the custom endpoint in `librechat.yaml`. `validate-config.sh`
+    fails the build if `OPENAI_MODELS` reappears. Read the page above first.
 
 ## Retiring a model
 
@@ -137,7 +143,7 @@ db.agents.aggregate([
   { $group: { _id: "$model", n: { $sum: 1 } } },
   { $match: { _id: { $nin: [
       "claude-opus-5","claude-sonnet-5","claude-haiku-4-5",
-      "gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna","gpt-5.4-nano" ] } } }
+      "gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna" ] } } }
 ])
 
 // and none hiding in version history

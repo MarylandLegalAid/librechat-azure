@@ -252,23 +252,39 @@ else
   echo "      only in configuration:   $(comm -13 <(echo "$approved") <(echo "$configured") | tr '\n' ' ')"
 fi
 
-# The three GPT-5.6 models must NOT be reachable through the built-in endpoint.
-# This is the whole point of the custom-endpoint arrangement, and it is exactly
-# the sort of thing a well-meaning tidy-up reintroduces.
-openai_models="$(grep '^OPENAI_MODELS=' env.defaults | cut -d= -f2-)"
-case "$openai_models" in
-  *gpt-5.6*)
-    fail "OPENAI_MODELS contains a GPT-5.6 model — it must not; see docs/modules/models-gpt56-responses.md"
-    ;;
-  *)
-    pass "OPENAI_MODELS excludes the GPT-5.6 models"
-    ;;
-esac
+# The built-in openAI endpoint was DELETED on 2026-07-30 (see librechat.yaml).
+# Every OpenAI model now reaches users only through the custom endpoint, which
+# forces the Responses API. These three checks assert that state rather than the
+# weaker "GPT-5.6 is excluded from OPENAI_MODELS" one they replace — that check
+# became vacuous the moment OPENAI_MODELS stopped existing, and a check that
+# cannot fail is decoration.
+if grep -q '^OPENAI_MODELS=' env.defaults; then
+  fail "OPENAI_MODELS is set — the built-in openAI endpoint is retired and must stay retired; see docs/modules/models-gpt56-responses.md"
+else
+  pass "OPENAI_MODELS is absent (built-in openAI endpoint retired)"
+fi
+
+if yq -e '.endpoints.openAI' librechat.yaml >/dev/null 2>&1; then
+  fail "librechat.yaml declares endpoints.openAI — the built-in endpoint is retired; it is a bypass route around the forced Responses API"
+else
+  pass "librechat.yaml does not declare the built-in openAI endpoint"
+fi
 
 if yaml_array_contains librechat.yaml '.modelSpecs.addedEndpoints' 'openAI'; then
   fail "modelSpecs.addedEndpoints includes openAI — that lets a user bypass the forced Responses API route"
 else
   pass "modelSpecs.addedEndpoints excludes the built-in openAI endpoint"
+fi
+
+# titleConvo MUST be true on the custom endpoint. When it was false, every
+# conversation on every migrated agent was silently saved as "New Chat" —
+# agents/title.js early-returns on titleConvo === false with no fallback. Direct
+# chats titled fine throughout, so nothing in a normal smoke test caught it.
+title_convo="$(yq -r '.endpoints.custom[] | select(.name == "OpenAI GPT-5.6 Responses") | .titleConvo' librechat.yaml 2>/dev/null)"
+if [ "$title_convo" = "true" ]; then
+  pass "custom endpoint has titleConvo: true (agents get conversation titles)"
+else
+  fail "custom endpoint titleConvo is '${title_convo:-unset}', must be true — agent conversations will all be saved as \"New Chat\" with no error anywhere"
 fi
 
 

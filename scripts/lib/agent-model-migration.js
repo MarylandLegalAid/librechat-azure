@@ -25,7 +25,6 @@ const APPROVED_MODELS = [
   'gpt-5.6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-luna',
-  'gpt-5.4-nano',
 ];
 
 /*
@@ -76,18 +75,21 @@ function planAgentChanges(agent, options) {
 
   /*
    * The gate on the AGENT ITSELF is its top-level model, and only that. An agent
-   * already on an approved model keeps that model and its provider — that is
-   * what keeps the gpt-5.4-nano agents on the built-in `openAI` endpoint, which
-   * is correct, because that model really is served there.
+   * already on an approved model keeps that model and its provider.
    *
    * Its HISTORY is a separate question, and is handled below regardless. An
    * agent can sit on an approved model while its snapshots do not: "Referral
-   * Bot" on production is on gpt-5.4-nano with 22 versions still referencing
-   * gpt-5-mini, gpt-5.4 and gpt-5.4-mini. Leaving those alone would fail the
-   * verification query, which §11.3 requires to come back empty for
-   * versions[].model as well, and would leave a revert one click away from a
-   * model that no longer exists — with one snapshot pointing gpt-5.4 at openAI,
-   * which cannot serve it.
+   * Bot" on production carried 22 versions referencing gpt-5-mini, gpt-5.4 and
+   * gpt-5.4-mini. Leaving those alone would fail the verification query, which
+   * §11.3 requires to come back empty for versions[].model as well, and would
+   * leave a revert one click away from a model that no longer exists — with one
+   * snapshot pointing gpt-5.4 at openAI, which cannot serve it.
+   *
+   * 2026-07-30: gpt-5.4-nano was removed from the approved list when the
+   * built-in `openAI` endpoint was deleted, so the five agents that sat on it
+   * are now migration targets like any other. Nothing in this function needed to
+   * change for that — the approved list is the whole gate, which is the point of
+   * keeping the decision data-driven.
    */
   const topLevelUnchanged = isApproved(agent.model);
 

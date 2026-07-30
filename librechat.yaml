@@ -190,14 +190,26 @@ endpoints:
       - "chain"
       - "ocr"
 
-  # The built-in openAI endpoint is kept configured but is NOT user-selectable —
-  # modelSpecs.addedEndpoints below deliberately omits it. It exists here for two
-  # things that are not affected by the Responses-API problem described below:
-  # chat-title generation, and the memory agent. OPENAI_MODELS (see env.defaults)
-  # therefore contains only gpt-5.4-nano.
-  openAI:
-    titleModel: "gpt-5.4-nano"
-
+  # THE BUILT-IN openAI ENDPOINT IS DELIBERATELY ABSENT. Do not add it back.
+  #
+  # It used to be configured — not user-selectable, but present — purely to host
+  # two things: chat-title generation and the memory agent, both on gpt-5.4-nano,
+  # which was the only model it served. On 2026-07-30 OpenAI cut gpt-5.6-luna to
+  # roughly nano's price, nano was retired, and with nothing left for the built-in
+  # endpoint to do it was removed outright.
+  #
+  # That is a security improvement, not merely a tidy-up. §11.4's protection used
+  # to be three parts, one of which was "modelSpecs.addedEndpoints omits openAI so
+  # the built-in endpoint is not selectable and cannot be used to bypass the forced
+  # Responses route". An endpoint that does not exist cannot be bypassed to. The
+  # hazard is gone rather than hidden.
+  #
+  # Consequences, so nobody re-adds it by accident:
+  #   - OPENAI_MODELS no longer exists in env.defaults.
+  #   - titleModel and the memory agent now live on the custom endpoint below.
+  #   - Every OpenAI model in this deployment is therefore forced through the
+  #     Responses API, with no exceptions and no second route.
+  #
   # ---------------------------------------------------------------------------
   # GPT-5.6 and the Responses API — read before changing anything below.
   # ---------------------------------------------------------------------------
@@ -239,7 +251,21 @@ endpoints:
           - "gpt-5.6-terra"
           - "gpt-5.6-sol"
         fetch: false
-      titleConvo: false
+      # titleConvo MUST stay true. It was false until 2026-07-30, copied from the
+      # Render config where it was harmless because no agent pointed at this
+      # endpoint. Once §11.3 moved agents here it stopped being harmless:
+      # api/server/services/Endpoints/agents/title.js early-returns on
+      # `client.options.titleConvo === false`, with no fallback to titleModel and
+      # no delegation elsewhere, so every conversation on every migrated agent was
+      # silently saved as "New Chat". Upstream's own test asserts this behaviour
+      # ("skips generation when the endpoint disables titleConvo").
+      #
+      # Note the asymmetry that made it hard to spot: DIRECT chats on this
+      # endpoint titled correctly throughout — the non-agent path does not consult
+      # this flag. Only agents were affected, which is why the smoke test's model
+      # checks all passed while 15 of 24 agents quietly lost their titles.
+      titleConvo: true
+      titleModel: "gpt-5.6-luna"
       summarize: false
       modelDisplayLabel: "OpenAI"
       addParams:
@@ -333,11 +359,16 @@ fileConfig:
 # =============================================================================
 # Memory (personalization)
 # =============================================================================
-# Runs on the built-in openAI endpoint, which is unaffected by the GPT-5.6
-# Responses routing above — that is one of the two reasons the built-in endpoint
-# stays configured rather than being removed entirely.
+# Runs on the custom GPT-5.6 endpoint. It used to run on the built-in openAI
+# endpoint with gpt-5.4-nano; both were retired on 2026-07-30 (see the endpoints
+# section above), so the memory agent moved here with everything else.
+#
+# ⚠️  The provider string must match endpoints.custom[].name BYTE FOR BYTE. Unlike
+# an agent, a broken memory provider does not produce an obvious failure — memory
+# extraction simply stops happening, and personalization quietly degrades with no
+# error surfaced to anyone. Verify it after any change to the endpoint name.
 memory:
   tokenLimit: 3000
   agent:
-    provider: "openAI"
-    model: "gpt-5.4-nano"
+    provider: "OpenAI GPT-5.6 Responses"
+    model: "gpt-5.6-luna"

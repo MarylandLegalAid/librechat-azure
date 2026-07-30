@@ -67,13 +67,13 @@ Drop your files into `client/public/assets/` and they replace the defaults. See
 
 ```
 ANTHROPIC_MODELS=claude-opus-5,claude-sonnet-5,claude-haiku-4-5
-OPENAI_MODELS=gpt-5.4-nano
 ```
 
-!!! warning "`OPENAI_MODELS` looks wrong and is not"
-    It contains one model deliberately. The GPT-5.6 family reaches users through a
-    separate endpoint because those models reject reasoning combined with tools on
-    the ordinary chat completions API.
+!!! warning "There is no `OPENAI_MODELS`, and that is deliberate"
+    OpenAI models are not listed here at all. They reach users through a separate
+    endpoint declared in `librechat.yaml`, because those models reject reasoning
+    combined with tools on the ordinary chat completions API. The built-in `openAI`
+    endpoint was retired outright so that no second route to them can exist.
 
     Read **[GPT-5.6 and the Responses API](../modules/models-gpt56-responses.md)**
     before changing that line. It is the least obvious thing in this repository and
