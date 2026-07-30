@@ -132,6 +132,15 @@ print('  Summary');
 print('--------------------------------------------------------------------------');
 print(`  Agents total        : ${summary.agentsTotal}`);
 print(`  Agents to change    : ${summary.agentsChanged}`);
+// Spelled out because the migration plan predicts how many agents move their
+// CURRENT model, and this number is larger than that whenever an agent already
+// on an approved model still has retired models in its history. Without this
+// line the totals look like they disagree with the plan and the reader has no
+// way to see why.
+if (summary.agentsHistoryOnly) {
+  print(`    of which history only : ${summary.agentsHistoryOnly}  (current model already approved)`);
+  print(`    moving current model  : ${summary.agentsChanged - summary.agentsHistoryOnly}`);
+}
 print(`  Agents unchanged    : ${summary.agentsSkipped}`);
 print(`  Field writes        : ${summary.fieldsChanged}`);
 print('');
@@ -239,6 +248,10 @@ print(
       agentId: plan.agentId,
       name: plan.name,
       skipped: plan.skipped,
+      // Serialized so the audit trail can answer "which agent was that?" — the
+      // summary counts history-only repairs, and without this the count is the
+      // only trace of them anywhere in the log.
+      historyOnly: plan.historyOnly,
       changes: plan.changes,
       warnings: plan.warnings,
     })),
