@@ -31,6 +31,30 @@ az vm run-command invoke -g rg-librechat-prod -n vm-librechat-prod \
 `deploy.sh` logs what it did at every stage and says loudly when it rolls back. Read
 that before anything else.
 
+### If a *feature* is broken rather than the whole application
+
+```bash
+./scripts/check-secrets.sh --vault "$VAULT"
+```
+
+Read-only, prints no secret values, and answers the question the health check cannot:
+**is the configuration complete?** Every one of these variables is optional as far as
+LibreChat is concerned — it starts, reports itself healthy, and fails only when somebody
+uses the thing.
+
+It checks by feature. A feature is switched on by a trigger variable, and once it is on
+its companions stop being optional, which is how "not configured" is told apart from
+"half configured". It also catches the shapes that are set but wrong: a `CREDS_KEY` of
+the wrong length, a `DOMAIN_SERVER` with a trailing slash, an `OPENID_CALLBACK_URL` given
+as a full URL when a path is required, and any of the all-or-nothing groups where setting
+some of the variables and not the rest is ignored entirely and in silence.
+
+On the machine itself, check what the application actually received:
+
+```bash
+./scripts/check-secrets.sh --env-file /srv/librechat/app/.env
+```
+
 ---
 
 ## Locked out of SSH
@@ -325,6 +349,29 @@ az role assignment list --assignee "$PRINCIPAL" --output table
 ```
 
 It needs **Key Vault Secrets User** on the vault.
+
+### Sign-in fails with `AADSTS50011` / redirect URI mismatch
+
+If the rejected URI in the error ends in the literal word **`undefined`** —
+`https://chat.yourorg.org` **`undefined`** — then `OPENID_CALLBACK_URL` is not set.
+LibreChat builds its redirect as `DOMAIN_SERVER + OPENID_CALLBACK_URL`, so an absent
+value concatenates the string `undefined` and no provider will ever match it.
+
+```bash
+az keyvault secret set --vault-name "$VAULT" \
+  --name OPENID-CALLBACK-URL --value "/oauth/openid/callback" --output none
+```
+
+It is a **path**, not a full URL, and it needs the leading slash. Then redeploy, and
+confirm what the running process actually holds:
+
+```bash
+docker compose exec api sh -lc 'echo "$DOMAIN_SERVER$OPENID_CALLBACK_URL"'
+```
+
+That result must appear verbatim in your identity provider's registered redirect URIs.
+`scripts/check-secrets.sh` catches all three variants of this — absent, given as a full
+URL, and missing the leading slash.
 
 ### A secret you set had no effect at all
 
