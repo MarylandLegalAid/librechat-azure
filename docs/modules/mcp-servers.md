@@ -172,6 +172,37 @@ exists to catch and the one that is hardest to spot by reading.
       X-Your-User-Email: "{{LIBRECHAT_USER_EMAIL}}"
     ```
 
+    **A server using this placeholder reports no tools at startup, and that is
+    normal.** There is no signed-in user when the application boots, so LibreChat
+    cannot open a user-scoped connection and defers that server's tool discovery
+    until someone logs in. The startup log looks alarming and is not:
+
+    ```
+    [MCP][LegalServer]  Capabilities: undefined
+    [MCP][LegalServer]  Tools: undefined
+    [MCP][LegalServer]  Initialized in: 42ms
+    [MCP] Initialized with 2 configured servers and 2 tools.
+    ```
+
+    Two servers, two tools — while the server showing `undefined` actually has 39.
+    Both counts are right: the two belong to the server *without* a placeholder,
+    which initializes application-wide. To confirm the quiet one really is healthy,
+    ask it directly rather than reading the startup log:
+
+    ```bash
+    docker compose exec api node -e '
+    fetch("http://legalserver-mcp:3001/legalserver/mcp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json",
+                 "Accept": "application/json, text/event-stream",
+                 "X-LegalServer-User-Email": "you@example.org" },
+      body: JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list",params:{}}),
+    }).then(r => r.text()).then(t => {
+      const d = t.split("\n").find(l => l.startsWith("data:"));
+      console.log(JSON.parse(d.slice(5)).result.tools.length + " tools");
+    })'
+    ```
+
 - **Tools should be read-only unless you have thought hard about it.** A model calling
   a tool that writes to your case management system is a different risk conversation
   from one that reads.
