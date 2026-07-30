@@ -108,7 +108,7 @@ Their conversations remain, which is usually what a records policy wants.
 ## Rotating a secret
 
 ```bash
-VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret set --vault-name "$VAULT" \
   --name ANTHROPIC-API-KEY --value "sk-ant-new..." --output none

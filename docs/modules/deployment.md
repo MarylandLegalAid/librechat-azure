@@ -143,7 +143,7 @@ Otherwise a timer run can race a pipeline run. They will not corrupt anything â€
 lock prevents that â€” but two things deploying is confusing to reason about.
 
 ```bash
-VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret set --vault-name "$VAULT" \
   --name DEPLOY-TIMER-ENABLED --value "false" --output none

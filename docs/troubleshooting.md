@@ -229,7 +229,7 @@ Every `mcpServers` URL needs a matching `mcpSettings.allowedAddresses` entry, as
 Check `COMPOSE_PROFILES` includes the profile:
 
 ```bash
-VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret show --vault-name "$VAULT" --name COMPOSE-PROFILES --query value -o tsv
 ```
@@ -325,6 +325,36 @@ az role assignment list --assignee "$PRINCIPAL" --output table
 ```
 
 It needs **Key Vault Secrets User** on the vault.
+
+### A secret you set had no effect at all
+
+Check you wrote it to the vault the deployment actually reads. If the resource group
+holds more than one Key Vault — one left behind by an earlier attempt is the usual way
+this happens — then the obvious lookup returns whichever the API listed first, which
+need not be yours:
+
+```bash
+az keyvault list -g rg-librechat-prod -o table          # more than one row?
+```
+
+Every command in these docs filters on the `kv-` prefix, because that is what the
+template always names its vault:
+
+```bash
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
+```
+
+The authoritative answer is on the machine itself — this is the name `deploy.sh` and
+`render-env.sh` really use, and it cannot disagree with reality:
+
+```bash
+az ssh vm -g rg-librechat-prod -n vm-librechat-prod -- -o IdentitiesOnly=yes \
+  'grep KV_NAME /etc/librechat-deploy.conf'
+```
+
+This failure is quiet in both directions: writing to the wrong vault succeeds, and the
+deploy that ignores it also succeeds. Nothing reports an error — the setting simply
+never takes.
 
 ---
 

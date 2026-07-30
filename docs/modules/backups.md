@@ -23,7 +23,7 @@ template created.
 Confirm the dump is configured:
 
 ```bash
-VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret show --vault-name "$VAULT" \
   --name BACKUP-STORAGE-ACCOUNT --query value -o tsv
@@ -116,7 +116,7 @@ and probably not something a VM backup should be answering — see
 Dump retention:
 
 ```bash
-VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret set --vault-name "$VAULT" \
   --name BACKUP-RETENTION-DAYS --value "60" --output none

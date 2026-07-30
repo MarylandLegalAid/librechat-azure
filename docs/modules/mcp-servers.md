@@ -43,7 +43,7 @@ the logs they should be reading.
 ## Turning one on
 
 ```bash
-VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret set --vault-name "$VAULT" \
   --name COMPOSE-PROFILES --value "mcp-legalserver,mcp-letterwriter" --output none

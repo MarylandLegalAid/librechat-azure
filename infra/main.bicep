@@ -114,7 +114,13 @@ var dataDiskName = 'disk-${namePrefix}-${environment}-data'
 // So the name carries a suffix derived from the resource group ID: stable
 // across redeploys of the same deployment, different for everyone else. Read
 // the actual name from this template's keyVaultName output, or with:
-//     az keyvault list -g <resource-group> --query "[0].name" -o tsv
+//     az keyvault list -g <rg> --query "[?starts_with(name,'kv-')].name | [0]" -o tsv
+//
+// Filter on the prefix; do NOT use "[0].name". `az keyvault list` does not
+// promise an order, and a resource group with any second vault in it — one left
+// behind by an earlier attempt, say — silently answers with the wrong one. A
+// secret then gets written somewhere nothing reads, which looks like it worked.
+// This template always names the vault kv-*, so the prefix is the reliable half.
 //
 // The 24-character limit is the reason for take(): 17 for the base, 1 for the
 // separator, 6 for the suffix. namePrefix is capped at 11 above, which

@@ -53,7 +53,7 @@ that **you do not have to move the files**.
 Set `FILE_STORAGE=disk` and **leave your AWS credentials set**:
 
 ```bash
-VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret set --vault-name "$VAULT" --name AWS-ACCESS-KEY-ID     --value "..."
 az keyvault secret set --vault-name "$VAULT" --name AWS-SECRET-ACCESS-KEY --value "..."
@@ -88,7 +88,7 @@ If you already run a bucket under an appropriate agreement and would rather keep
 files there:
 
 ```bash
-VAULT=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret set --vault-name "$VAULT" --name FILE-STORAGE --value "s3"
 ```

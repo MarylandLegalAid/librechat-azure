@@ -26,7 +26,7 @@ comfortable to switch on.
 ## Turning it on
 
 ```bash
-V=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+V=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 az keyvault secret set --vault-name $V --name COMPOSE-PROFILES \
   --value "mcp-legalserver" --output none
 az keyvault secret set --vault-name $V --name LEGALSERVER-BASE-URL \

@@ -60,7 +60,7 @@ minutes, and there is no long-lived credential to rotate.
 Once the interpreter machine is running:
 
 ```bash
-V=$(az keyvault list -g rg-librechat-prod --query "[0].name" -o tsv)
+V=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
 
 az keyvault secret set --vault-name $V --name LIBRECHAT-CODE-BASEURL \
   --value "https://code.yourorg.org/v1" --output none
