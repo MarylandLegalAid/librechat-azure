@@ -75,44 +75,33 @@ function planAgentChanges(agent, options) {
   };
 
   /*
-   * The gate is the TOP-LEVEL model, and only that. An agent already on an
-   * approved model is left completely alone, provider included — that is what
-   * keeps the gpt-5.4-nano agents on the built-in `openAI` endpoint, which is
-   * correct, because that model really is served there.
+   * The gate on the AGENT ITSELF is its top-level model, and only that. An agent
+   * already on an approved model keeps that model and its provider — that is
+   * what keeps the gpt-5.4-nano agents on the built-in `openAI` endpoint, which
+   * is correct, because that model really is served there.
+   *
+   * Its HISTORY is a separate question, and is handled below regardless. An
+   * agent can sit on an approved model while its snapshots do not: "Referral
+   * Bot" on production is on gpt-5.4-nano with 22 versions still referencing
+   * gpt-5-mini, gpt-5.4 and gpt-5.4-mini. Leaving those alone would fail the
+   * verification query, which §11.3 requires to come back empty for
+   * versions[].model as well, and would leave a revert one click away from a
+   * model that no longer exists — with one snapshot pointing gpt-5.4 at openAI,
+   * which cannot serve it.
    */
-  if (isApproved(agent.model)) {
-    /*
-     * ...but say so if such an agent is carrying a retired model in its history.
-     * Nothing here rewrites it, because the instruction is to leave these agents
-     * alone. Reverting to that version would resurrect a model that no longer
-     * exists, so it is worth a human's attention rather than silence.
-     */
-    const staleVersions = [];
-    (agent.versions || []).forEach((version, index) => {
-      if (version && version.model && !isApproved(version.model)) {
-        staleVersions.push(`versions[${index}].model=${version.model}`);
-      }
-    });
-
-    if (staleVersions.length) {
-      warnings.push(
-        `left untouched (already on approved model "${agent.model}"), but its ` +
-          `history still references retired models: ${staleVersions.join(', ')}`,
-      );
-    }
-
-    return { agentId, name, skipped: true, changes, warnings, set };
-  }
+  const topLevelUnchanged = isApproved(agent.model);
 
   /* --- The agent itself --------------------------------------------------- */
-  const target = lookup(agent.model, 'model');
+  if (!topLevelUnchanged) {
+    const target = lookup(agent.model, 'model');
 
-  changes.push({ field: 'model', from: agent.model, to: target.model });
-  set.model = target.model;
+    changes.push({ field: 'model', from: agent.model, to: target.model });
+    set.model = target.model;
 
-  if (agent.provider !== target.provider) {
-    changes.push({ field: 'provider', from: agent.provider, to: target.provider });
-    set.provider = target.provider;
+    if (agent.provider !== target.provider) {
+      changes.push({ field: 'provider', from: agent.provider, to: target.provider });
+      set.provider = target.provider;
+    }
   }
 
   /* --- Every version snapshot --------------------------------------------- */
@@ -152,7 +141,21 @@ function planAgentChanges(agent, options) {
     }
   });
 
-  return { agentId, name, skipped: false, changes, warnings, set };
+  /*
+   * `skipped` means nothing at all was planned — not merely that the top-level
+   * model was already fine. An agent whose history alone needed repair is a
+   * changed agent, and counting it as skipped would hide exactly the work this
+   * pass exists to do.
+   */
+  return {
+    agentId,
+    name,
+    skipped: changes.length === 0,
+    historyOnly: topLevelUnchanged && changes.length > 0,
+    changes,
+    warnings,
+    set,
+  };
 }
 
 /*
@@ -163,6 +166,7 @@ function summarize(plans) {
   const byTarget = {};
   let agentsChanged = 0;
   let agentsSkipped = 0;
+  let agentsHistoryOnly = 0;
   let fieldsChanged = 0;
 
   plans.forEach((plan) => {
@@ -171,6 +175,11 @@ function summarize(plans) {
       return;
     }
     agentsChanged += 1;
+    // Reported separately so the headline can be compared against the migration
+    // plan's expected count without the two silently disagreeing: the plan
+    // predicts agents whose CURRENT model moves, and a history-only repair is
+    // not one of those.
+    if (plan.historyOnly) agentsHistoryOnly += 1;
     fieldsChanged += plan.changes.length;
 
     const modelChange = plan.changes.filter((c) => c.field === 'model')[0];
@@ -186,6 +195,7 @@ function summarize(plans) {
     agentsTotal: plans.length,
     agentsChanged,
     agentsSkipped,
+    agentsHistoryOnly,
     fieldsChanged,
     byTarget,
   };

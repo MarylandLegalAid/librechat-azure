@@ -105,7 +105,11 @@ test('an approved-model agent keeps provider openAI even though gpt-5.6 moved', 
   assert.deepStrictEqual(plan.warnings, []);
 });
 
-test('an approved-model agent with retired models in its history is flagged, not changed', () => {
+test('an approved-model agent still has its history repaired, top level untouched', () => {
+  // "Referral Bot" on production: sitting on an approved model with 22 snapshots
+  // on retired ones. Leaving those would fail §11.3's verification query, which
+  // must come back empty for versions[].model too, and would leave a revert one
+  // click away from a model that no longer exists.
   const plan = planAgentChanges(
     agent({
       model: 'claude-haiku-4-5',
@@ -114,10 +118,34 @@ test('an approved-model agent with retired models in its history is flagged, not
     }),
     OPTS,
   );
+
+  assert.strictEqual(plan.skipped, false);
+  assert.strictEqual(plan.historyOnly, true);
+
+  // The agent's own model and provider are NOT touched — that is what keeps an
+  // approved model on the endpoint that actually serves it.
+  assert.ok(!('model' in plan.set), 'top-level model must not be rewritten');
+  assert.ok(!('provider' in plan.set), 'top-level provider must not be rewritten');
+  assert.ok(!plan.changes.some((c) => c.field === 'model' || c.field === 'provider'));
+
+  // The stale snapshot is repaired, and the approved one is left alone.
+  assert.strictEqual(plan.set['versions.0.model'], 'gpt-5.6-terra');
+  assert.strictEqual(plan.set['versions.0.provider'], 'OpenAI GPT-5.6 Responses');
+  assert.ok(!('versions.1.model' in plan.set), 'an approved snapshot is not rewritten');
+});
+
+test('an approved-model agent with clean history is skipped entirely', () => {
+  const plan = planAgentChanges(
+    agent({
+      model: 'gpt-5.4-nano',
+      provider: 'openAI',
+      versions: [{ model: 'gpt-5.4-nano', provider: 'openAI' }],
+    }),
+    OPTS,
+  );
   assert.strictEqual(plan.skipped, true);
+  assert.strictEqual(plan.historyOnly, false);
   assert.deepStrictEqual(plan.set, {});
-  assert.strictEqual(plan.warnings.length, 1);
-  assert.match(plan.warnings[0], /versions\[0\]\.model=gpt-5\.2/);
 });
 
 /* ------------------------------------------------------------------------- */
@@ -310,12 +338,25 @@ test('the production distribution produces exactly the expected plan', () => {
 
   assert.strictEqual(fleet.length, 24);
 
+  // "Referral Bot": on an approved model, but 22 snapshots on retired ones.
+  // Present in the fixture because it is present in production — without it this
+  // test would keep predicting 18/6 while the real dry run reported 19/5, and the
+  // whole point of mirroring the fleet here is that it cannot drift.
+  fleet[0].name = 'Referral Bot';
+  fleet[0].versions = [
+    ...Array.from({ length: 17 }, () => ({ model: 'gpt-5-mini', provider: 'openAI' })),
+    ...Array.from({ length: 4 }, () => ({ model: 'gpt-5.4', provider: 'openAI' })),
+    { model: 'gpt-5.4-mini', provider: 'openAI' },
+  ];
+
   const plans = fleet.map((a) => planAgentChanges(a, OPTS));
   const summary = summarize(plans);
 
   assert.strictEqual(summary.agentsTotal, 24);
-  assert.strictEqual(summary.agentsChanged, 18);
-  assert.strictEqual(summary.agentsSkipped, 6);
+  // 18 agents move their current model; Referral Bot's history alone is repaired.
+  assert.strictEqual(summary.agentsChanged, 19);
+  assert.strictEqual(summary.agentsSkipped, 5);
+  assert.strictEqual(summary.agentsHistoryOnly, 1);
 
   assert.strictEqual(summary.byTarget['gpt-5.6-luna'].count, 9);
   assert.strictEqual(summary.byTarget['gpt-5.6-terra'].count, 6);
