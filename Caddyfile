@@ -18,6 +18,31 @@
 # staging they are the staging hostnames; at cutover they become the production
 # ones and the stack is redeployed, at which point Caddy issues new certificates
 # on demand. Nothing else changes.
+#
+# 🔴 EDITING THIS FILE IS NOT ENOUGH. RECREATE THE CONTAINER.
+#
+# This file is bind-mounted as a SINGLE FILE (compose.yaml: ./Caddyfile ->
+# /etc/caddy/Caddyfile). Docker binds a single file by INODE, and deploy.sh
+# updates the checkout with `git reset --hard`, which writes a REPLACEMENT file
+# with a new inode. The running container therefore keeps reading the old inode
+# and never sees the change — indefinitely, not until the next restart.
+#
+# `docker restart caddy` does NOT fix it: restarting reuses the same container
+# and the same stale mount. Worse, `caddy reload` re-reads the OLD file and
+# EXITS 0, reporting success. Observed 2026-07-31: host inode 554472, container
+# inode 554430, a full day apart, with a clean deploy and a clean reload.
+#
+# The fix is to recreate the container so the mount is re-established:
+#
+#   docker compose -f compose.yaml -f compose.storage.disk.yml \
+#     up -d --force-recreate caddy
+#
+# Then verify against the wire, not the log — `curl -I` for whatever header or
+# route you changed. deploy.sh does not do this for you; it handles the same
+# hazard for librechat.runtime.yaml only because yq REWRITES that file in place
+# (same inode) rather than replacing it. At cutover the change to CHAT_DOMAIN
+# and ADMIN_DOMAIN alters caddy's environment, so Compose recreates the
+# container anyway and this trap does not apply to that particular deploy.
 # =============================================================================
 
 {

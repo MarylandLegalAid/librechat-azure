@@ -60,9 +60,13 @@ cache: true
 # Two consequences that are deliberate, not oversights:
 #   1. Images in publicly shared conversations stop loading for anyone not signed
 #      in. John's call, 2026-07-31: safety over convenience.
-#   2. Agent avatars stay public. The middleware exempts
-#      /images/<24-hex>/agent-* by regex, so agent cards still render before a
-#      session exists. Nothing else is exempt.
+#   2. Agent avatars remain readable by any SIGNED-IN user, not by the public.
+#      The middleware exempts /images/<24-hex>/agent-* by regex, but that
+#      exemption sits *after* the cookie and token checks, so it waives only the
+#      "is this your own user id" test, never authentication. That is what makes
+#      a shared agent's avatar — which lives under its author's user id — render
+#      for everyone else. Verified on staging 2026-07-31: another author's agent
+#      avatar returns 200 with a session and 401 without one.
 #
 # The uploads half — PDFs, .docx, spreadsheets — was never affected: those are
 # served by /api/files, which sits behind requireJwtAuth.
