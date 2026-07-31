@@ -124,7 +124,7 @@ interface:
     externalUrl: "https://mdlegalaid.sharepoint.com/:b:/s/briefcase-ops-it/ESp1b64hLm9DuNO699zqDd4BTuizAgZE8QzlEjo4jv_EMA"
     openNewTab: true
     modalAcceptance: true
-    modalTitle: "MLAGPT 4 User Agreement"
+    modalTitle: "MLAGPT 4.1 User Agreement"
     modalContent: |
      By accessing or using MLAGPT, you acknowledge that you have read, understood, and agree to the terms below. You must click “I Agree” to continue.
 
@@ -177,7 +177,7 @@ interface:
 
      **If you do not agree, do not proceed.**
   # Greeting shown on a new chat.
-  customWelcome: "Howdy! Welcome to MLAGPT 4 - How can I help you today?"
+  customWelcome: "Howdy! Welcome to MLAGPT 4.1 - How can I help you today?"
 
 # =============================================================================
 # Registration
