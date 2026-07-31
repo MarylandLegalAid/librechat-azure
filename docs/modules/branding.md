@@ -1,6 +1,6 @@
 # Your branding
 
-Making it look like your organization's tool. Four things, none of which needs a
+Making it look like your organization's tool. Five things, none of which needs a
 rebuild.
 
 ## Name and greeting
@@ -22,6 +22,28 @@ The greeting on a new chat is in `librechat.yaml`:
 interface:
   customWelcome: "Welcome! How can I help you today?"
 ```
+
+## The footer
+
+`CUSTOM_FOOTER` is the line under the message box. It is per-deployment, so it lives in the
+key vault next to `APP_TITLE`:
+
+```bash
+az keyvault secret set --vault-name "$VAULT" \
+  --name CUSTOM-FOOTER \
+  --value "While Your Organization AI aims for accuracy, users are responsible for
+fact-checking generated content." --output none
+```
+
+It is the one piece of text every user sees on every screen without having to open anything,
+which makes it the right place for a standing caution and the wrong place for anything long.
+One sentence.
+
+!!! warning "It is easy to forget when you rename things"
+    The footer and `APP_TITLE` are in the key vault, while the welcome line and the user
+    agreement are in `librechat.yaml`. A rename that only greps the repository will miss both
+    vault secrets and leave the old name on screen. Check `env | grep -i title` inside the
+    `api` container if you are unsure what is actually live.
 
 ## Logo and favicons
 

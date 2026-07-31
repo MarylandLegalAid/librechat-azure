@@ -94,6 +94,13 @@ provider you configure. Pick one you already have an agreement with. See
 ## What the platform does to help
 
 - **Users only see their own conversations.** There is no cross-user visibility.
+- **Uploaded files and generated images need a session**, and one belonging to the user who
+  owns them. Documents go through an authenticated download route. Images need
+  `secureImageLinks: true` in `librechat.yaml` — **this is not LibreChat's default**, and
+  without it the image directory is served to anyone holding the URL, with no session at all.
+  It is set in this repository. If you are adapting this configuration, do not remove it, and
+  if you are auditing a different LibreChat deployment, check for it specifically: the
+  middleware that enforces it is a no-op when the key is absent, so the route *looks* guarded.
 - **Stored provider API keys are encrypted at rest** with `CREDS_KEY`.
 - **Nothing is published.** Agents can be shared within your organization if you
   enable the marketplace, and not outside it.
@@ -133,3 +140,4 @@ Honestly, because you will be asked:
 - [ ] Who administers this, and what can they see?
 - [ ] What is our answer when a funder asks where client data goes?
 - [ ] Do our record retention obligations apply to conversations here?
+- [ ] Have we checked that an image URL, opened in a signed-out browser, is refused?

@@ -403,6 +403,43 @@ This failure is quiet in both directions: writing to the wrong vault succeeds, a
 deploy that ignores it also succeeds. Nothing reports an error — the setting simply
 never takes.
 
+### A `Caddyfile` change had no effect, and the reload said it worked
+
+The file on disk is right, the deploy said `deployed … successfully`, `caddy reload` exited
+0 — and the proxy is still serving the old configuration. It will keep doing so indefinitely.
+
+Compare the file the container sees against the one on the host:
+
+```bash
+sudo stat -c 'host  inode=%i  mtime=%y' /srv/librechat/app/Caddyfile
+sudo docker exec caddy stat -c 'cntr  inode=%i  mtime=%y' /etc/caddy/Caddyfile
+```
+
+**Different inodes is the answer.** Docker bind-mounts a *single file* by inode, not by path.
+`deploy.sh` updates the checkout with `git reset --hard`, which writes a replacement file — a
+new inode — so the container goes on reading the old one. `caddy reload` then dutifully
+re-reads that stale file and reports success, which is why this looks like a working change
+rather than a broken one.
+
+`docker restart caddy` does **not** help: restarting reuses the same container and the same
+stale mount. The container has to be recreated:
+
+```bash
+cd /srv/librechat/app
+sudo docker compose -f compose.yaml -f compose.storage.disk.yml up -d --force-recreate caddy
+```
+
+Then verify against the wire rather than a log line — `curl -I` for whatever header or route
+you changed.
+
+Two things this does *not* affect. Directory mounts such as `./scripts` follow the path and
+are fine. And `librechat.runtime.yaml` escapes it by accident: `deploy.sh` generates that file
+with a shell redirect, which truncates the existing file and keeps its inode.
+
+Anything that changes a Caddy **environment variable** — `CHAT_DOMAIN`, `ADMIN_DOMAIN`,
+`ACME_EMAIL` — recreates the container by itself, so those changes never show this symptom.
+It is edits to the `Caddyfile` alone that do.
+
 ---
 
 ## The disk filled up
