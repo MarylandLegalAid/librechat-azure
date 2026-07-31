@@ -36,6 +36,38 @@ version: 1.3.13
 # Caches the parsed config for faster loading across the app lifecycle.
 cache: true
 
+# Requires a valid session to fetch anything under /images/.
+#
+# LEAVING THIS UNSET IS NOT A NEUTRAL DEFAULT — IT SERVES THE DATA DISK TO THE
+# INTERNET. api/server/index.js mounts the images directory as a static route:
+#
+#   app.use('/images/', createValidateImageRequest(appConfig.secureImageLinks), routes.staticRoute);
+#
+# and createValidateImageRequest returns a passthrough — `(_req,_res,next) => next()`
+# — when the value is falsy. The guard is present in the chain, named as though it
+# guards, and does nothing. compose.storage.disk.yml bind-mounts ${DATA_DIR}/images
+# onto exactly the directory that route serves, so with this key absent every
+# generated image AND every image a user has ever uploaded is readable by anyone
+# who has the URL, with no LibreChat session. Verified on staging 2026-07-31: a
+# user's uploaded photo returned 200 to an unauthenticated request.
+#
+# Enabled, the middleware requires a `refreshToken` cookie that verifies against
+# JWT_REFRESH_SECRET and is unexpired, AND that the path is /images/<that user's
+# own id>/<file>. Entra users reach the same branch: the OpenID path in
+# AuthService.js sets the same cookie, and the alternative branch needs
+# OPENID_REUSE_TOKENS, which this deployment does not set.
+#
+# Two consequences that are deliberate, not oversights:
+#   1. Images in publicly shared conversations stop loading for anyone not signed
+#      in. John's call, 2026-07-31: safety over convenience.
+#   2. Agent avatars stay public. The middleware exempts
+#      /images/<24-hex>/agent-* by regex, so agent cards still render before a
+#      session exists. Nothing else is exempt.
+#
+# The uploads half — PDFs, .docx, spreadsheets — was never affected: those are
+# served by /api/files, which sits behind requireJwtAuth.
+secureImageLinks: true
+
 # =============================================================================
 # Interface
 # =============================================================================

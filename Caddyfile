@@ -61,6 +61,39 @@
 		file_server
 	}
 
+	# --- Generated and uploaded images ---------------------------------------
+	# Defence in depth behind `secureImageLinks: true` in librechat.yaml, which
+	# is what actually authenticates these requests. This block exists because
+	# the two headers LibreChat sends for /images/ are wrong for confidential
+	# content, and both were verified on the wire on 2026-07-31:
+	#
+	#   access-control-allow-origin: *
+	#       Lets any web page READ the bytes cross-origin, not merely link to
+	#       them. Removing it costs nothing: a plain <img src> does not need
+	#       CORS, and nothing in LibreChat fetches these images with script.
+	#
+	#   cache-control: public, max-age=172800, s-maxage=86400
+	#       `public` invites shared and intermediary caches — a corporate proxy,
+	#       a CDN — to keep a client's image for up to a day. `private, no-store`
+	#       keeps it out of shared caches and off local disk. The cost is that
+	#       images re-download on each view; for client photographs that is the
+	#       right side of the trade. If the bandwidth ever matters, `private,
+	#       max-age=172800` keeps the browser cache and still excludes shared
+	#       ones.
+	#
+	# Written as its own `handle` rather than a bare `header` directive on
+	# purpose: `handle` blocks are evaluated in the order written, so this is
+	# order-independent and does not rely on remembering where `header` sits in
+	# Caddy's global directive ordering. Like the letters block, it must come
+	# BEFORE the catch-all `handle` below.
+	handle /images/* {
+		header {
+			-Access-Control-Allow-Origin
+			Cache-Control "private, no-store"
+		}
+		reverse_proxy api:3080
+	}
+
 	# LibreChat streams responses token by token over Server-Sent Events. Caddy's
 	# reverse proxy passes those through without buffering by default, so no
 	# flush interval or buffering directives are needed here. Adding response
