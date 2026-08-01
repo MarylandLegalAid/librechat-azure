@@ -26,10 +26,12 @@ Being concrete about this is more useful than any general statement.
 | **Web search queries** | **Sent to your search provider** | **Serper, Firecrawl, or Jina** |
 | **Speech-to-text audio** | **Sent to OpenAI** | **OpenAI** |
 | **Generated images** | **Prompt sent to OpenAI** | **OpenAI** |
-| **OCR page images** (if enabled) | **Sent to your OCR provider** | **That provider** |
+| OCR page images | Off by default — nothing leaves unless you enable it | **Your OCR provider, if you turn it on** |
 
-The last five rows are the ones that matter. Everything else stays inside
-infrastructure you control.
+The rows in bold are the ones that matter — they are every case where data can leave
+your infrastructure. Everything else stays inside infrastructure you control. The last
+row is conditional: OCR is a real egress path in the software, off unless you switch it
+on, and the section below is about why you might not want to.
 
 ## The two agreements you probably need
 
@@ -87,8 +89,18 @@ Unset `STT_API_KEY` to disable it.
 
 ### OCR in the LegalServer tools
 
-Off by default. Enabling it sends page images of client documents to whichever
-provider you configure. Pick one you already have an agreement with. See
+Off by default. Maryland Legal Aid also leaves it off deliberately, and the reasoning
+is worth borrowing even if you reach a different answer.
+
+Enabling it sends page images of client documents to a third party. That is a broader
+disclosure than prompts and responses: a scanned document contains whatever the client
+brought in rather than what a worker chose to type, so having an agreement with the
+vendor does not by itself settle whether those documents should go there. Local OCR
+avoids the disclosure but needs CPU a chat-sized VM does not have.
+
+If you enable it, that row in the table above stops being conditional for you — update
+it, and say which provider in your terms of service. The full argument and what would
+have to change are in
 [LegalServer tools](modules/mcp-legalserver.md#ocr-for-scanned-documents).
 
 ## What the platform does to help

@@ -114,7 +114,8 @@ else
 
   # The handful whose SHAPE matters. Fetched individually and never printed.
   for v in COMPOSE_PROFILES FILE_STORAGE OPENID_CALLBACK_URL DOMAIN_CLIENT \
-           DOMAIN_SERVER CREDS_KEY CREDS_IV LIBRECHAT_CODE_BASEURL; do
+           DOMAIN_SERVER CREDS_KEY CREDS_IV LIBRECHAT_CODE_BASEURL \
+           DOCUMENT_OCR_PROVIDER; do
     if [ "${values[$v]:-}" = "<present>" ]; then
       values["$v"]="$(az keyvault secret show --vault-name "$VAULT_NAME" \
                         --name "${v//_/-}" --query value -o tsv 2>/dev/null)"
@@ -293,6 +294,57 @@ else
         LEGALSERVER_CURRENT_USER_TASKS_REPORT_URL \
         LEGALSERVER_CURRENT_USER_MATTERS_REPORT_URL \
         LEGALSERVER_CURRENT_USER_EVENTS_REPORT_URL
+
+      # OCR is the trigger-and-companions pattern again, except which companion
+      # is required depends on the trigger's VALUE rather than just its presence
+      # — so DOCUMENT_OCR_PROVIDER is one of the few secrets fetched in full
+      # above. Empty and `none` both mean off, which is a complete state, not a
+      # half-configured one.
+      #
+      # This deployment leaves OCR off deliberately — every provider sends page
+      # images of client documents to a third party, and local OCR does not fit
+      # this VM's CPU budget. The checks below exist for whoever decides
+      # otherwise: a half-configured provider should fail here rather than on the
+      # first scanned page. See docs/modules/mcp-legalserver.md.
+      ocr_provider="$(value_of DOCUMENT_OCR_PROVIDER)"
+      case "$ocr_provider" in
+        ''|none)
+          pass "mcp-legalserver: OCR off — document tools read native-digital PDFs only"
+          ;;
+        openai)
+          # Already required by the core check, but only because ANTHROPIC_API_KEY
+          # is the alternative there. An Anthropic-only deployment passes core and
+          # would land here with no key at all.
+          require "mcp-legalserver OCR (openai)" OPENAI_API_KEY
+          ;;
+        openrouter)
+          require "mcp-legalserver OCR (openrouter)" OPENROUTER_API_KEY
+          ;;
+        vertex_gemini)
+          require "mcp-legalserver OCR (vertex_gemini)" GOOGLE_CLOUD_PROJECT
+          # Application Default Credentials need a file the container can open.
+          # legalserver-mcp declares no volumes, so unless compose.yaml has been
+          # changed to mount one, this path resolves to nothing and every OCR
+          # call fails while the server itself stays healthy.
+          if is_set GOOGLE_APPLICATION_CREDENTIALS; then
+            warn "mcp-legalserver: vertex_gemini reads a service-account FILE at GOOGLE_APPLICATION_CREDENTIALS — confirm compose.yaml mounts it into legalserver-mcp, which declares no volumes by default"
+          else
+            fail "mcp-legalserver: vertex_gemini has no credentials — set GOOGLE_APPLICATION_CREDENTIALS and mount the file into legalserver-mcp"
+          fi
+          ;;
+        *)
+          fail "mcp-legalserver: DOCUMENT_OCR_PROVIDER='$ocr_provider' is not one of openai, openrouter, vertex_gemini, none"
+          ;;
+      esac
+
+      # An explicit model overrides the provider's own default, and nothing
+      # checks that the two belong together until a page is sent.
+      case "$ocr_provider" in
+        ''|none) ;;
+        *) is_set DOCUMENT_OCR_MODEL \
+             && warn "mcp-legalserver: DOCUMENT_OCR_MODEL is set — confirm that model exists on '$ocr_provider', or unset it to take that provider's default" \
+             || pass "mcp-legalserver: OCR model left to the provider's default" ;;
+      esac
       ;;
   esac
   case ",$profiles," in
