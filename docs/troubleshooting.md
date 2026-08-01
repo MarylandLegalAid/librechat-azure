@@ -271,10 +271,40 @@ in `/srv/librechat/data/letterheads`. It refuses to start and names the file.
 
 ## Search returns nothing
 
-Meilisearch rebuilds its index from MongoDB, which takes a few minutes after a restore
-or a version change. Wait, then retry.
+### If it followed a database restore, waiting will not fix it
 
-If it never recovers:
+**A restored database tells LibreChat the index is already built, and it believes it.**
+
+`indexSync` never asks Meilisearch how many documents it holds. It reads a `_meiliIndex`
+flag on the MongoDB documents — and a dump restored from another machine carries that
+flag set `true`, because those documents genuinely were indexed, in the *other*
+machine's Meilisearch. Your index is empty, the flags say otherwise, the sync is
+skipped, and nothing anywhere reports a problem.
+
+Ask Meilisearch directly rather than trusting the application:
+
+```bash
+docker compose exec -T meilisearch \
+  curl -s -H "Authorization: Bearer $MEILI_MASTER_KEY" http://127.0.0.1:7700/stats
+```
+
+If `convos` and `messages` are far below the MongoDB counts, clear the flags and restart
+`api` — the reset procedure is in
+[Migrating an existing install](modules/migrating-an-existing-install.md#6-reset-the-search-index-then-let-it-rebuild).
+
+Two things that make this worse:
+
+- `indexSync` runs **only at api startup**, so a restart is what triggers it.
+- It skips any backlog below `MEILI_SYNC_THRESHOLD` (default **1000**), so a small
+  restore is skipped in silence even once the flags are right.
+
+!!! warning "`npm run reset-meili-sync` performs the reset and then hangs forever"
+    It prompts twice on stdin using a fresh readline interface each time; with piped
+    input the first swallows the whole buffer and closes, and the second waits on an
+    exhausted stream. SIGTERM does not clear it — only restarting the container does.
+    The reset itself has already committed by the time it hangs.
+
+### If it is not a restore
 
 ```bash
 docker compose logs meilisearch --tail 50
@@ -298,7 +328,42 @@ the state you are in and there is no shortcut.
 If you migrated from S3 and left `FILE_STORAGE=disk`, those records are still served
 from the bucket. Check the AWS credentials are still set and the bucket still exists.
 
-See [S3 and legacy file storage](modules/storage-s3-legacy.md).
+**Then check the objects themselves are still there**, which is a different question and
+the more likely answer:
+
+```bash
+aws s3api head-object --bucket "$BUCKET" --key "images/<userId>/<name>"
+```
+
+A lifecycle rule that expires objects deletes the **bytes but not the database
+records**, so the application goes on advertising attachments that no longer exist.
+Nothing errors — it is behaving correctly on the data it has. This is how Maryland Legal
+Aid lost 71% of its legacy files without noticing for months.
+
+See [S3 and legacy file storage](modules/storage-s3-legacy.md#check-your-bucket-is-still-there).
+
+## An image will not load, but documents are fine
+
+Expected, if the person is signed out. `secureImageLinks: true` requires a session **and**
+a path matching the requesting user's own id, so an image URL returns **401** with no
+session and **403** for somebody else's image.
+
+The consequence to know about: **images in publicly shared conversations do not load for
+signed-out viewers.** That is the cost of the setting, and it is deliberate — without it
+the entire image directory is served to anyone holding a URL. See
+[Compliance](compliance.md).
+
+If an image fails for its *own* signed-in owner, that is a real fault. Check the file
+exists on the data disk at the path the database records.
+
+## One user's avatar is missing
+
+Avatars are stored as a plain path on the user document, with **no `files` record** — so
+nothing reports them missing and no integrity check covers them.
+
+After a migration, the usual cause is an avatar set on the old host after the last file
+copy. Diff the two machines' image trees; see
+[Migrating an existing install](modules/migrating-an-existing-install.md#4-copy-the-uploaded-files).
 
 ---
 

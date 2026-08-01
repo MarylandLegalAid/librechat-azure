@@ -155,3 +155,9 @@ There is no permanent staging environment here, and pretending otherwise would b
 worse than saying so. For a high-stakes upgrade, deploy a second instance from the
 same template pointed at a restored copy of your data, test there, then upgrade
 production. `scripts/restore.sh` makes that about a twenty-minute exercise.
+
+!!! warning "A restored copy is not a faithful copy until you fix two things"
+    Conversation search and document chat both come back broken from a database restore,
+    and neither reports it — so an upgrade tested against a naive restore tells you
+    nothing about either. See
+    [Test your restore](backups.md#test-your-restore) before you trust the comparison.

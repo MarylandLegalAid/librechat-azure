@@ -72,16 +72,44 @@ scripts/restore.sh --from-blob latest
 The script tells you how many user accounts it is about to destroy and makes you type
 `restore` to continue.
 
-After it finishes: sign in, open an old conversation, and search for a phrase you know
-exists. Search will be incomplete for a few minutes while Meilisearch rebuilds its
-index from the restored data — that is expected, and it is worth watching once so you
-know what it looks like.
+After it finishes: sign in, open an old conversation, and **search for a phrase you know
+exists**. Then ask a document-chat question about a file that was indexed before the
+restore.
+
+!!! danger "Two things a database restore does not bring back, and neither reports a problem"
+    **The restore test passes with both of these broken.** The database comes back, the
+    site loads, and you would only notice by searching or by asking about an old
+    document.
+
+    **1. Conversation search.** A restored dump carries `_meiliIndex: true` on every
+    document, so LibreChat believes the index is already built and skips the sync. Your
+    index is empty. Nothing logs an error. Verify against Meilisearch itself:
+
+    ```bash
+    docker compose exec -T meilisearch \
+      curl -s -H "Authorization: Bearer $MEILI_MASTER_KEY" http://127.0.0.1:7700/stats
+    ```
+
+    If the counts are far below MongoDB's, clear the flags and restart `api` — procedure
+    in [Migrating an existing install](migrating-an-existing-install.md#6-reset-the-search-index-then-let-it-rebuild).
+
+    **2. Document chat.** The embeddings live in pgvector, not MongoDB, so this dump
+    never contained them. If you restored the database onto a machine whose vector
+    database does not match, document chat answers **without consulting your documents**
+    — confidently, and without an error. The vector data is on the data disk, so an
+    Azure Backup restore covers it; a database-only restore does not.
 
 !!! note "The dump does not include uploaded files"
     Restoring the database alone leaves attachments that appear in conversations and
     will not open. For a full recovery you need the Azure Backup restore point too.
 
     This is worth understanding *before* you need it.
+
+!!! warning "Anything you fixed in the database gets undone"
+    A restore replaces the database wholesale, including repairs you made to agents,
+    file records or product naming. If you have such fixes, they must exist as
+    idempotent scripts you re-run after every restore — not as remembered actions. See
+    [Migrating an existing install](migrating-an-existing-install.md#7-re-apply-anything-the-restore-overwrote).
 
 ## Restoring the whole machine
 

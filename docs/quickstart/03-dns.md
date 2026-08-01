@@ -35,6 +35,24 @@ you control the name by connecting to whatever that name currently resolves to. 
 DNS is not ready, issuance fails, and Let's Encrypt rate-limits repeated failures for
 the same name. Waiting ten minutes now is much better than waiting an hour later.
 
+!!! tip "Check it more than once, and check both names"
+    Run the two commands a handful of times over a minute or so. A single correct answer
+    is not proof: large DNS providers answer from many servers, and during a change they
+    do not all update together — so you can get the right address once and the wrong one
+    on the next try. Wait until every attempt agrees.
+
+    Check the `chat-admin` record specifically. It is brand new rather than an edit, and
+    new names often appear later than changed ones.
+
+    If you want to see what the internet sees rather than what your own machine has
+    cached, ask your domain's own nameservers:
+
+    ```bash
+    for ns in $(dig +short NS yourorg.org); do
+      dig +short chat.yourorg.org @"$ns"
+    done
+    ```
+
 ## While you wait
 
 Confirm the machine finished setting itself up:

@@ -47,8 +47,17 @@ spend time on it.
 
 ## Migrating off S3 without moving anything
 
-If you are moving an existing LibreChat that used S3, the useful thing to know is
-that **you do not have to move the files**.
+If you are moving an existing LibreChat that used S3, you **can** leave the old files
+where they are and point the new deployment at the same bucket.
+
+!!! danger "Read the next section before you rely on this"
+    This works only for as long as the objects actually exist. Maryland Legal Aid ran
+    this configuration and **71% of the legacy files had already been deleted** by a
+    bucket lifecycle rule — silently, months earlier, with every database record intact
+    and the application cheerfully advertising attachments that were gone.
+
+    Leaving files in a bucket is not a decision you make once. It is an ongoing
+    dependency on that bucket's configuration.
 
 Set `FILE_STORAGE=disk` and **leave your AWS credentials set**:
 
@@ -70,17 +79,86 @@ What happens:
 No bulk copy. No database rewrite. Nothing to go wrong halfway through, because
 nothing happens at all.
 
-This is what Maryland Legal Aid runs: 2,040 legacy files still served from S3,
-everything since on disk. The bucket and its credentials stay indefinitely — they are
-not a migration leftover to clean up, they are load-bearing.
+## Check your bucket is still there
 
-!!! warning "Do not delete the bucket"
-    Deleting it breaks every attachment older than the migration. There is no
-    warning and no error at deploy time; the files simply stop opening.
+**Do this before you decide to leave anything in S3, and do it against the bucket
+rather than the database.**
 
-    If you genuinely want to retire the bucket, you have to copy the objects to the
-    data disk **and** rewrite the `source` field on those file records. That is a
-    real project, not a cleanup task.
+Maryland Legal Aid ran the configuration above for months. A bucket-wide lifecycle rule
+was expiring objects after roughly 45 days. It deleted the **bytes but not the database
+records**, so LibreChat kept listing the attachments and rendering them as broken files.
+
+Measured across all 2,045 legacy records by comparing the bucket's key listing against
+the keys the database expected:
+
+| Record month | Present | Missing |
+|---|---|---|
+| 2025-12 → 2026-05 | **0** | 1,312 |
+| 2026-06 | 370 | 139 |
+| 2026-07 | 224 | 0 |
+| **Total** | **594** | **1,451 (71%)** |
+
+A clean age-based cutoff, and **unrecoverable** — bucket versioning was disabled, so
+there were no delete markers to restore.
+
+Nothing about this was visible from inside the application. There was no error, no log
+line and no failed health check, because the application was behaving correctly on the
+data it had. It was found only when somebody opened a year-old conversation and noticed
+the images did not load.
+
+```bash
+# does the bucket still hold what the database thinks it does?
+aws s3 ls "s3://$BUCKET" --recursive | awk '{print $4}' | sort > bucket-keys.txt
+
+# and check what will delete them next
+aws s3api get-bucket-lifecycle-configuration --bucket "$BUCKET"
+aws s3api get-bucket-versioning --bucket "$BUCKET"
+```
+
+An empty lifecycle configuration today does not prove the files were never at risk — it
+only proves nothing is expiring them right now.
+
+!!! danger "Deleting object storage without deleting the database record produces a broken file, not a missing one"
+    This is the general lesson, and it applies to any retention policy you write later,
+    on any storage:
+
+    - Delete **both** the stored object and its database record, together.
+    - Delete neither.
+
+    Deleting only the bytes leaves the application advertising files it cannot serve,
+    and it will do so indefinitely without ever reporting a problem.
+
+    LibreChat v0.8.7 has **no** general file-retention policy of its own — the only
+    expiry machinery is temporary-chat retention. Nothing in the application will do
+    this to your data disk by itself. If you add age-based cleanup later, that script
+    owns both halves.
+
+## Moving the files onto the disk after all
+
+If the bucket turns out to be a liability rather than an archive — which is the
+conclusion Maryland Legal Aid reached — copy what still exists onto the data disk and
+rewrite those records to `source: local`.
+
+The path mapping is direct, because the S3 key already encodes `<file_id>__<filename>`,
+which is exactly the local convention:
+
+```
+s3  images/<userId>/<name>   ->  <data disk>/images/<userId>/<name>
+s3  uploads/<userId>/<name>  ->  <data disk>/uploads/<userId>/<name>
+```
+
+Write it **disk-first** — a file already present at the right size is relinked with no
+fetch — so the migration is idempotent, cheap to re-run, and still correct if more
+objects have disappeared in the meantime. Verify each write by byte count, and expect
+records whose objects are gone to remain `source: s3`; those are not failures, they are
+files that no longer exist.
+
+**Re-run it after every database restore.** The bytes on the disk survive a restore; the
+records do not, and they revert to `source: s3` along with everything else.
+
+Maryland Legal Aid now runs this: 594 salvaged files serving from disk, 1,451 dead
+records deliberately left alone because deleting them edits real conversation history,
+and **no user-facing file depending on S3 at all**.
 
 ## Running new files on S3 too
 
