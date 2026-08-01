@@ -74,3 +74,22 @@ HANDOFF.md
 START-HERE.md
 *-recon.md
 *-internal.md
+
+# --- Exported data -----------------------------------------------------------
+# Anything exported from an identity provider, a directory, or the application
+# itself. These carry personal data — names, work email addresses, IP addresses,
+# device identifiers — and none of it belongs in a public repository.
+#
+# Do not rely on `gitleaks` or push protection to catch these: personal data is
+# not a credential, so nothing in the automated chain is looking for it. This
+# block is the only control that applies.
+#
+# The failure mode to guard against is `git add -A` in a directory where an
+# export happens to be sitting. Keep exports somewhere else entirely; this is
+# the backstop, not the plan.
+*.csv
+*.xlsx
+*.xls
+*signins*
+*-export-*
+*-audit-*
