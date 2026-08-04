@@ -115,7 +115,7 @@ else
   # The handful whose SHAPE matters. Fetched individually and never printed.
   for v in COMPOSE_PROFILES FILE_STORAGE OPENID_CALLBACK_URL DOMAIN_CLIENT \
            DOMAIN_SERVER CREDS_KEY CREDS_IV LIBRECHAT_CODE_BASEURL \
-           DOCUMENT_OCR_PROVIDER; do
+           DOCUMENT_OCR_PROVIDER DOCUMENT_OCR_MAX_PAGES; do
     if [ "${values[$v]:-}" = "<present>" ]; then
       values["$v"]="$(az keyvault secret show --vault-name "$VAULT_NAME" \
                         --name "${v//_/-}" --query value -o tsv 2>/dev/null)"
@@ -301,11 +301,13 @@ else
       # above. Empty and `none` both mean off, which is a complete state, not a
       # half-configured one.
       #
-      # This deployment leaves OCR off deliberately — every provider sends page
-      # images of client documents to a third party, and local OCR does not fit
-      # this VM's CPU budget. The checks below exist for whoever decides
-      # otherwise: a half-configured provider should fail here rather than on the
-      # first scanned page. See docs/modules/mcp-legalserver.md.
+      # OpenAI is the ONLY supported provider as of legalserver-mcp v3.1.0. Page
+      # images of client documents have to stay with a single vendor to remain
+      # inside the ZDR agreement, so `openrouter` and `vertex_gemini` were
+      # removed from the server rather than merely discouraged. The server now
+      # throws on them AT BOOT, which is why they fail here too: this script must
+      # never green-light a config the container refuses to start on.
+      # See docs/modules/mcp-legalserver.md.
       ocr_provider="$(value_of DOCUMENT_OCR_PROVIDER)"
       case "$ocr_provider" in
         ''|none)
@@ -317,33 +319,38 @@ else
           # would land here with no key at all.
           require "mcp-legalserver OCR (openai)" OPENAI_API_KEY
           ;;
-        openrouter)
-          require "mcp-legalserver OCR (openrouter)" OPENROUTER_API_KEY
-          ;;
-        vertex_gemini)
-          require "mcp-legalserver OCR (vertex_gemini)" GOOGLE_CLOUD_PROJECT
-          # Application Default Credentials need a file the container can open.
-          # legalserver-mcp declares no volumes, so unless compose.yaml has been
-          # changed to mount one, this path resolves to nothing and every OCR
-          # call fails while the server itself stays healthy.
-          if is_set GOOGLE_APPLICATION_CREDENTIALS; then
-            warn "mcp-legalserver: vertex_gemini reads a service-account FILE at GOOGLE_APPLICATION_CREDENTIALS — confirm compose.yaml mounts it into legalserver-mcp, which declares no volumes by default"
-          else
-            fail "mcp-legalserver: vertex_gemini has no credentials — set GOOGLE_APPLICATION_CREDENTIALS and mount the file into legalserver-mcp"
-          fi
+        openrouter|vertex_gemini)
+          fail "mcp-legalserver: DOCUMENT_OCR_PROVIDER='$ocr_provider' was REMOVED in legalserver-mcp v3.1.0 and now fails at container boot — page images must stay with one vendor to remain inside the ZDR agreement. Set DOCUMENT_OCR_PROVIDER=openai or none."
           ;;
         *)
-          fail "mcp-legalserver: DOCUMENT_OCR_PROVIDER='$ocr_provider' is not one of openai, openrouter, vertex_gemini, none"
+          fail "mcp-legalserver: DOCUMENT_OCR_PROVIDER='$ocr_provider' is not one of openai, none"
           ;;
       esac
 
-      # An explicit model overrides the provider's own default, and nothing
-      # checks that the two belong together until a page is sent.
+      # An explicit model overrides the server's default, and nothing checks that
+      # the model exists or is vision-capable until a page is sent.
       case "$ocr_provider" in
-        ''|none) ;;
-        *) is_set DOCUMENT_OCR_MODEL \
-             && warn "mcp-legalserver: DOCUMENT_OCR_MODEL is set — confirm that model exists on '$ocr_provider', or unset it to take that provider's default" \
-             || pass "mcp-legalserver: OCR model left to the provider's default" ;;
+        openai)
+          is_set DOCUMENT_OCR_MODEL \
+            && warn "mcp-legalserver: DOCUMENT_OCR_MODEL is set — confirm it is a vision-capable OpenAI model, or unset it to take the server's default (gpt-5.6-luna)" \
+            || pass "mcp-legalserver: OCR model left to the server's default (gpt-5.6-luna)"
+
+          # Bounds the per-document OCR spend. The server defaults to 50 and
+          # rejects anything below 1 at boot. Matter-wide search with
+          # include_scanned multiplies this, so a low ceiling is the cheap
+          # protection against a surprise bill.
+          ocr_max_pages="$(value_of DOCUMENT_OCR_MAX_PAGES)"
+          case "$ocr_max_pages" in
+            '')
+              warn "mcp-legalserver: DOCUMENT_OCR_MAX_PAGES unset — defaulting to 50 pages per document; consider 10 until the first week's spend is known" ;;
+            *[!0-9]*)
+              fail "mcp-legalserver: DOCUMENT_OCR_MAX_PAGES='$ocr_max_pages' is not a whole number — the server refuses to start on this" ;;
+            0)
+              fail "mcp-legalserver: DOCUMENT_OCR_MAX_PAGES=0 is rejected at boot — use 1 or more, or set DOCUMENT_OCR_PROVIDER=none to turn OCR off" ;;
+            *)
+              pass "mcp-legalserver: OCR capped at $ocr_max_pages page(s) per document" ;;
+          esac
+          ;;
       esac
       ;;
   esac

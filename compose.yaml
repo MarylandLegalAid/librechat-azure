@@ -263,7 +263,7 @@ services:
   # the trust boundary; both images support an optional shared-secret header
   # that is deliberately left unset. See docs/modules/mcp-servers.md.
   legalserver-mcp:
-    image: ghcr.io/marylandlegalaid/legalserver-mcp:v3.0.0
+    image: ghcr.io/marylandlegalaid/legalserver-mcp:v3.1.0
     container_name: legalserver-mcp
     profiles: ["mcp-legalserver"]
     restart: unless-stopped
