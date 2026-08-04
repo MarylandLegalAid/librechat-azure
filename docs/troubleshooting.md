@@ -82,6 +82,35 @@ az network nsg rule update \
   --source-address-prefixes "$MY_IP/32"
 ```
 
+!!! warning "Mirror the fix into `infra/main.parameters.json`, or it will be undone"
+    Either recovery above changes the **live** NSG only. The rule is generated from
+    `adminSourceAddressPrefixes` in `infra/main.parameters.json`, so the next
+    `az deployment group create` overwrites your fix with whatever that file says —
+    locking you out again, and doing it at the moment someone is deploying rather
+    than at a moment of your choosing.
+
+    Edit the file at the same time you edit the rule. It is one line, and it is the
+    difference between a fix and a fix that expires silently.
+
+    ```bash
+    # what the template will push next time
+    jq -r '.parameters.adminSourceAddressPrefixes.value[]' infra/main.parameters.json
+
+    # what is live right now
+    az network nsg rule show -g rg-librechat-prod --nsg-name nsg-librechat-prod \
+      --name allow-ssh-admin \
+      --query "[sourceAddressPrefix, sourceAddressPrefixes]" -o json
+    ```
+
+    Read them together. Azure stores a **single** prefix in `sourceAddressPrefix` and
+    **two or more** in the `sourceAddressPrefixes` array, so one of the two is always
+    empty and that is not a fault.
+
+    `infra/main.parameters.json` is gitignored — it names your machine and your admin
+    addresses, which do not belong in a public repository. That also means it is not
+    shared: a copy on another machine can be stale without anything indicating so, and
+    deploying from there is what re-adds an address you thought you had removed.
+
 !!! tip "You may not need SSH at all"
     `az vm run-command` goes through the Azure control plane, not the network, and
     keeps working when SSH does not. Most operational tasks can be done that way —

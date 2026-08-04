@@ -14,6 +14,59 @@ only one party uses is a mechanism only one party finds the bugs in.
 | **systemd timer** | Grantees, by default | Every five minutes, checks for new commits. Almost always exits immediately. |
 | **GitHub Actions** | Maryland Legal Aid | On push to `main`, runs the same script with `--force`. |
 
+## Infrastructure is a separate deploy, and it is not automated
+
+Everything on this page deploys the **application** — containers, configuration, `.env`.
+It never touches the VM, the disk, the network security group, or the alerts. Those come
+from the Bicep template in `infra/`, and nothing applies it automatically:
+
+```bash
+az deployment group create \
+  --resource-group rg-librechat-prod \
+  --template-file infra/main.bicep \
+  --parameters infra/main.parameters.json
+```
+
+The GitHub Actions deploy cannot do this even if you wanted it to — its app registration
+holds **Virtual Machine Contributor on the VM alone**, which permits running a command on
+that one machine and nothing else. `validate.yml` builds and lints the template on every
+pull request but never deploys it. So infrastructure changes only when a person runs the
+command above.
+
+That matters because of what it implies for changes made by hand:
+
+!!! warning "A change made directly in Azure is reverted by the next template deploy"
+    The template is the source of truth for everything it declares. If you edit an NSG
+    rule, an alert, or a disk setting in the portal or with `az`, that change survives
+    only until someone runs `az deployment group create` — which then quietly restores
+    whatever `infra/main.parameters.json` says.
+
+    **Change it in both places, at the moment you change it.** The one that has already
+    caused trouble here is the SSH allow list: fixing a lockout live and not mirroring it
+    into the parameters file gives you a fix that expires without warning, during someone
+    else's deploy. See
+    [Locked out of SSH](../troubleshooting.md#locked-out-of-ssh).
+
+`infra/main.parameters.json` is **gitignored** on purpose — it carries your machine name,
+your admin source addresses, and your alert recipients, none of which belong in a public
+repository. `infra/main.parameters.example.json` is the committed shape to copy.
+
+The consequence is that the filled-in file is not shared and not versioned. A copy on a
+second machine drifts silently, and deploying from there applies *its* values. If more
+than one person can run a template deploy, agree on which machine is authoritative, and
+compare the file against live state before deploying:
+
+```bash
+jq -r '.parameters.adminSourceAddressPrefixes.value[]' infra/main.parameters.json
+az network nsg rule show -g rg-librechat-prod --nsg-name nsg-librechat-prod \
+  --name allow-ssh-admin --query "[sourceAddressPrefix, sourceAddressPrefixes]" -o json
+```
+
+A missing parameters file fails loudly rather than dangerously: `adminSshPublicKey`,
+`adminSourceAddressPrefixes` and `alertEmail` are declared without defaults, so a deploy
+without them stops instead of provisioning an SSH rule that allows everyone or no one.
+A **stale** file is the dangerous case, because it deploys cleanly.
+
 ## What deploy.sh does
 
 1. Takes a lock, so two runs cannot overlap. A second run exits quietly.
