@@ -69,8 +69,10 @@ docs/                     the documentation site
 Three ideas do most of the work:
 
 **One deploy path, two triggers.** `scripts/deploy.sh` is the only thing that ever
-deploys. A grantee's systemd timer and Maryland Legal Aid's GitHub Actions pipeline
-both run it, unchanged. Neither path can rot while the other is exercised.
+deploys. A systemd timer and an optional GitHub Actions pipeline both run it, unchanged,
+so neither path can rot while the other is exercised. In practice everyone including
+Maryland Legal Aid runs the timer — the pipeline ships unconfigured and skips itself, so
+treat it as a setup path that has not been exercised.
 [How deploys work](https://marylandlegalaid.github.io/librechat-azure/modules/deployment/).
 
 **No secret in a file.** Secrets live in Azure Key Vault. The VM reads them with its

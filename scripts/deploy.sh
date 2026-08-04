@@ -2,12 +2,16 @@
 #
 # The only thing that ever deploys this stack.
 #
-# Two different triggers call this same script, which is the point: a grantee's
-# five-minute systemd timer and Maryland Legal Aid's GitHub Actions pipeline run
+# Two different triggers call this same script, which is the point: they run
 # identical code, so neither path can rot while the other is exercised.
 #
 #     systemd timer   →  deploy.sh          (checks for new commits, usually exits)
 #     GitHub Actions  →  deploy.sh --force  (deploy this commit now)
+#
+# In practice only the timer is in use, here and everywhere else. The Actions
+# workflow is gated on a repository variable that is not set, so it skips itself
+# on every push — it has never actually run. That means a push does NOT deploy
+# immediately; it deploys within five minutes. Pass --force to skip the wait.
 #
 # What it does, in order:
 #

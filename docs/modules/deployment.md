@@ -6,13 +6,28 @@ One script deploys this stack. Everything else is a way of asking it to run.
 scripts/deploy.sh
 ```
 
-Two things trigger it, and they run identical code. That is the point: a mechanism
-only one party uses is a mechanism only one party finds the bugs in.
+Two things *can* trigger it, and they run identical code — deliberately, because a
+mechanism only one party uses is a mechanism only one party finds the bugs in.
 
 | Trigger | Who | What it does |
 |---|---|---|
-| **systemd timer** | Grantees, by default | Every five minutes, checks for new commits. Almost always exits immediately. |
-| **GitHub Actions** | Maryland Legal Aid | On push to `main`, runs the same script with `--force`. |
+| **systemd timer** | Everyone, Maryland Legal Aid included | Every five minutes, checks for new commits. Almost always exits immediately. |
+| **GitHub Actions** | Nobody yet — ships unconfigured | On push to `main`, *would* run the same script with `--force`. Skips itself while `AZURE_CLIENT_ID` is unset. |
+
+!!! note "The pipeline has never actually run"
+    `deploy.yml` is gated on `if: vars.AZURE_CLIENT_ID != ''`, and that variable is not
+    set on this repository. Every run of that workflow so far — 33 of them at the time of
+    writing — has been skipped, including Maryland Legal Aid's. **Production deploys here
+    come from the timer, and only from the timer.**
+
+    This is worth saying plainly rather than leaving the table to imply otherwise, because
+    the sentence above it claims the two paths keep each other honest. Right now one of
+    them is exercised by nobody, so treat [GitHub Actions deploys](#github-actions-deploys)
+    as an untested setup path rather than a second working mechanism.
+
+    The practical consequence: **a push does not deploy immediately.** It deploys within
+    five minutes, when the timer next looks. If you need it now, run `scripts/deploy.sh
+    --force` on the host.
 
 ## Infrastructure is a separate deploy, and it is not automated
 
@@ -138,8 +153,11 @@ systemctl list-timers librechat-deploy.timer
 
 ## GitHub Actions deploys
 
-Maryland Legal Aid deploys through a pipeline instead of the timer, for gating and an
-audit trail. If you want the same:
+The intent was for Maryland Legal Aid to deploy through a pipeline instead of the timer,
+for gating and an audit trail. **That was never finished** — the variables below are
+unset, so the workflow skips itself and MLA runs on the timer like everyone else. The
+steps are written and the workflow is committed, but neither has been exercised
+end to end. If you want to set it up, expect to debug it rather than to follow it:
 
 ### 1. An app registration with a federated credential
 
@@ -194,6 +212,15 @@ get a red tick on their first push.
 
 Otherwise a timer run can race a pipeline run. They will not corrupt anything — the
 lock prevents that — but two things deploying is confusing to reason about.
+
+!!! danger "Only after you have watched the pipeline deploy successfully"
+    The workflow skips itself silently when its variables are missing or wrong. Turning
+    the timer off before a green, genuinely-executed pipeline run leaves the deployment
+    with **no** trigger at all: pushes land on `main`, nothing applies them, and the
+    running stack quietly falls behind the repository with nothing reporting a failure.
+
+    Confirm the run actually executed rather than skipped — `gh run list --workflow=deploy.yml`
+    should show `success`, not `skipped` — and only then disable the timer.
 
 ```bash
 VAULT=$(az keyvault list -g rg-librechat-prod --query "[?starts_with(name,'kv-')].name | [0]" -o tsv)
