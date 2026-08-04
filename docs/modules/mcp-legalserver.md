@@ -13,9 +13,9 @@ run LibreChat.
 ## What it can do
 
 - Look up matters and their details
-- Read documents attached to a matter — **native-digital PDFs only**. A scanned
-  document has no text layer to read, and OCR is deliberately not enabled here. See
-  [OCR for scanned documents](#ocr-for-scanned-documents).
+- Read documents attached to a matter, including **scanned documents via OCR**, which
+  this deployment now enables. See [OCR for scanned documents](#ocr-for-scanned-documents)
+  for what that sends where, and why it is scoped rather than matter-wide.
 - Search contacts, users and organizations
 - "My tasks", "my calendar", "my matters" for the signed-in user, when you supply the
   saved-report URLs that back them
@@ -65,46 +65,75 @@ supports is passed straight through.
 
 ## OCR for scanned documents
 
-The server supports OCR. **This deployment leaves it off**, so the document tools work
-on native-digital PDFs — a scan has no text layer and returns nothing useful, which is
-expected behaviour rather than a bug to report.
+The server supports OCR through **OpenAI only**, and **this deployment now enables it**
+(`DOCUMENT_OCR_PROVIDER=openai`, enabled 2026-08-04 with `legalserver-mcp` v3.1.0).
+Scanned pages are rasterised to PNG with `pdftoppm` in memory — nothing is written to
+disk — and sent one page at a time to a vision model.
 
-That is a judgement rather than a limitation, so here is the whole of it; you may weigh
-it differently. Two independent reasons, either enough on its own:
+This section used to explain why it was off. That judgement has been made rather than
+reversed, so here is what actually changed and what did not.
 
-**A cloud vision model is a confidentiality problem.** Every supported provider works
-by sending page images somewhere else. A scanned document is whatever the client
-walked in with — an ID, a medical record, a court paper someone else's lawyer sent —
-so it is a broader and less predictable disclosure than a prompt a caseworker chose
-to type. That is a different question from "do we have an agreement with this vendor",
-and it is not answered by having one.
+**The confidentiality question was answered, not dropped.** A scanned document is
+whatever the client walked in with — an ID, a medical record, a court paper someone
+else's lawyer sent — so it is a broader and less predictable disclosure than a prompt a
+caseworker chose to type. What makes it acceptable here is the third item on the
+checklist this section used to carry: a cloud arrangement whose terms genuinely cover
+**client documents** rather than chat. MLA holds ZDR on the OpenAI account (confirmed
+2026-08-03). That is also why `openrouter` and `vertex_gemini` were **removed from the
+server entirely** rather than merely discouraged — page images have to stay with the one
+vendor the agreement covers. Both values now fail at container boot.
 
-**Local OCR does not fit the machine.** Tesseract or PaddleOCR would keep the pages on
-your own hardware and answer the paragraph above, but the VM this blueprint provisions
-is `Standard_D4s_v5` — four vCPUs shared by the app, MongoDB, Meilisearch, pgvector and
-the RAG service. It is sized for chat, not for page rasterisation. A multi-page scan
-would saturate the CPU everything else is sharing and would likely exceed the tool-call
-timeout, which reaches the user as a tool that hangs and then fails, on the documents
-most likely to matter.
+**Local OCR still does not fit the machine**, and that has not changed. Tesseract or
+PaddleOCR would keep the pages on your own hardware, but the VM this blueprint
+provisions is `Standard_D4s_v5` — four vCPUs shared by the app, MongoDB, Meilisearch,
+pgvector and the RAG service. A multi-page scan would saturate the CPU everything else
+is sharing and would likely exceed the tool-call timeout.
 
-### What would make it reasonable
+### The carve-out ZDR does not close
 
-Worth stating as a checklist, because "set the variable" is the easy part and not the
-part that decides it. Any of these changes the answer:
+**`store: false` is not zero retention.** The server hardcodes it on every page request
+and no environment variable can turn it off, but it only stops the page image becoming a
+retrievable stored object. Abuse-monitoring retention is governed by the ZDR agreement
+on the account.
 
-- A vision model running **on infrastructure you control**, which removes the
-  disclosure entirely rather than relocating it.
-- **Dedicated compute** — a separate worker, so a scan cannot starve chat — plus an
-  async path that survives the tool-call timeout instead of racing it.
-- A cloud arrangement whose terms genuinely cover **client documents** rather than
-  chat, entered into deliberately and written down.
+**ZDR does not cover the CSAM scan.** OpenAI scans every image input for CSAM and
+retains flagged images for manual human review regardless of ZDR. On a legal aid
+document mix — custody, abuse/neglect, CPS, paediatric records — that is a real
+carve-out, not a theoretical one. It is the main reason OCR is scoped to documents an
+agent has decided are worth reading, rather than run across a whole matter.
 
-If you do enable it, `scripts/check-secrets.sh` validates the provider and its
-companion key, so a half-configured one fails loudly rather than on the first scanned
-page. Note that `vertex_gemini` cannot work as this repository ships: it authenticates
-with a service-account **file**, and `legalserver-mcp` mounts no volumes. Update your
-[Compliance](../compliance.md) data-flow table and your terms of service to name the
-provider.
+### How it is scoped
+
+- **OCR is decided per page**, not per document, so a typed motion with scanned exhibits
+  costs a few vision calls rather than one per page of the whole filing.
+- **`matter_search_document_text` does not OCR by default.** It searches what is readable
+  and reports what it skipped in `meta.documents_requiring_ocr`. The calling agent
+  decides what is worth reading, so that decision lands in the transcript where a
+  caseworker can audit and override it.
+- **`DOCUMENT_OCR_MAX_PAGES` is a per-document ceiling, set to 25 here.** A document
+  needing more OCR pages than that is refused outright with `document_too_large` rather
+  than partially transcribed. It is **not** a cap on matter-wide spend: an agent supplies
+  `ocr_page_budget` per search, which defaults to this value but is not clamped to it. If
+  you want to bound what a matter-wide search costs, change the agent's instructions —
+  that is the lever that governs the total.
+
+**Prompt injection is not mitigated in code.** OCR text is transcribed verbatim into the
+agent's context, including from documents filed by opposing parties. Treat it as
+untrusted input.
+
+`scripts/check-secrets.sh` validates the provider, its key, and the page ceiling, so a
+half-configured one fails there rather than on the first scanned page. Update your
+[Compliance](../compliance.md) data-flow table and your terms of service to name OpenAI
+as a recipient of client document images.
+
+### Turning it off, and rolling back
+
+Set `DOCUMENT-OCR-PROVIDER` to `none` in Key Vault and run `scripts/deploy.sh --force`.
+
+**Order matters if you are also rolling the image back.** The `v3.0.0` image rejects
+`DOCUMENT_OCR_PROVIDER=openai` at boot, so repinning the image while the variable still
+says `openai` gives you a container that will not start, while you are already
+mid-incident. **Set the variable to `none` first, then repin.**
 
 ## Checking it works
 

@@ -26,12 +26,12 @@ Being concrete about this is more useful than any general statement.
 | **Web search queries** | **Sent to your search provider** | **Serper, Firecrawl, or Jina** |
 | **Speech-to-text audio** | **Sent to OpenAI** | **OpenAI** |
 | **Generated images** | **Prompt sent to OpenAI** | **OpenAI** |
-| OCR page images | Off by default — nothing leaves unless you enable it | **Your OCR provider, if you turn it on** |
+| **OCR page images** | **Off by default. Maryland Legal Aid enables it — page images sent to OpenAI** | **OpenAI, if you turn it on** |
 
 The rows in bold are the ones that matter — they are every case where data can leave
 your infrastructure. Everything else stays inside infrastructure you control. The last
-row is conditional: OCR is a real egress path in the software, off unless you switch it
-on, and the section below is about why you might not want to.
+row ships off and is a real egress path the moment you switch it on; the section below
+is about what turning it on actually commits you to.
 
 ## The two agreements you probably need
 
@@ -89,8 +89,9 @@ Unset `STT_API_KEY` to disable it.
 
 ### OCR in the LegalServer tools
 
-Off by default. Maryland Legal Aid also leaves it off deliberately, and the reasoning
-is worth borrowing even if you reach a different answer.
+Off by default. **Maryland Legal Aid enables it** (since 2026-08-04), through OpenAI,
+which is the only provider the server supports. The reasoning is worth borrowing even if
+you reach a different answer.
 
 Enabling it sends page images of client documents to a third party. That is a broader
 disclosure than prompts and responses: a scanned document contains whatever the client
@@ -98,9 +99,23 @@ brought in rather than what a worker chose to type, so having an agreement with 
 vendor does not by itself settle whether those documents should go there. Local OCR
 avoids the disclosure but needs CPU a chat-sized VM does not have.
 
-If you enable it, that row in the table above stops being conditional for you — update
-it, and say which provider in your terms of service. The full argument and what would
-have to change are in
+What made it acceptable at MLA was an agreement that covers **client documents** rather
+than chat — ZDR on the OpenAI account, confirmed 2026-08-03 — plus scoping OCR to
+documents an agent has decided are worth reading rather than running it matter-wide.
+The server sends `store: false` on every page request and cannot be configured not to.
+
+**Two things ZDR does not settle, and you should not assume it does:**
+
+- `store: false` is not zero retention. It stops the page image becoming a retrievable
+  stored object; abuse-monitoring retention is governed by the agreement itself.
+- **OpenAI scans every image input for CSAM and retains flagged images for manual human
+  review regardless of ZDR.** For a legal aid caseload — custody, abuse/neglect, CPS,
+  paediatric records — this is a real carve-out affecting exactly the documents most
+  likely to be scanned.
+
+If you enable it, that row in the table above applies to you — update it, and name the
+provider in your terms of service. The full picture, including how the page ceiling
+works and how to roll back safely, is in
 [LegalServer tools](modules/mcp-legalserver.md#ocr-for-scanned-documents).
 
 ## What the platform does to help
