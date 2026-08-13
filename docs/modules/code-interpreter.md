@@ -30,12 +30,12 @@ work.
 
 ## What it costs
 
-A `Standard_D2s_v5` — about **$70/month** — plus its disk and public IP. That size
-class supports nested virtualization, which is the whole reason it is viable. Two
-concurrent executions is a reasonable starting point.
+A `Standard_D2s_v5` — about **$70/month** for compute, or roughly **$85/month** with
+its disk and public IP. That size class supports nested virtualization, which is the
+whole reason it is viable. Two concurrent executions is a reasonable starting point.
 
-Realistically this doubles the infrastructure cost of the deployment. Decide whether
-you want the capability before building it.
+The interpreter adds roughly $85/month to the infrastructure bill. Decide whether you
+want the capability before building it.
 
 ## How authentication works
 

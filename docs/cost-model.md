@@ -1,6 +1,7 @@
 # What it costs
 
-Real numbers, from a real deployment. Azure pricing changes and varies by region, so
+Real numbers, from the live deployment. Its application host is currently
+`Standard_D2s_v5` (2 vCPU / 8 GB). Azure pricing changes and varies by region, so
 treat these as accurate to within about 20% rather than as a quote.
 
 ## Infrastructure
@@ -9,7 +10,7 @@ For a few hundred users, in `eastus2`, pay-as-you-go:
 
 | Resource | Spec | Approx. per month |
 |---|---|---|
-| Virtual machine | `Standard_D4s_v5`, 4 vCPU / 16 GB | $140 |
+| Virtual machine | `Standard_D2s_v5`, 2 vCPU / 8 GB | $70 |
 | OS disk | Premium SSD, 30 GB | $5 |
 | Data disk | Premium SSD, 128 GB | $19 |
 | Public IP | Standard, static | $4 |
@@ -18,19 +19,22 @@ For a few hundred users, in `eastus2`, pay-as-you-go:
 | Key Vault | A few dozen secrets | $1 |
 | Monitoring | Alerts + one availability test | $2 |
 | Bandwidth | Egress | $5–15 |
-| | **Total** | **≈ $190–210** |
+| | **Total** | **≈ $120–140** |
 
 ### Making it cheaper
 
+The current deployment already uses the 2-vCPU/8-GB size. The remaining savings come
+from:
+
 | Change | Saves | Costs you |
 |---|---|---|
-| `Standard_D2s_v3` (2 vCPU / 8 GB) | ~$70/mo | Fine for under ~100 users. The previous deployment ran on this. |
 | 1-year reserved instance | ~35% of VM | A one-year commitment |
 | 3-year reserved instance | ~55% of VM | A three-year commitment |
 | Standard SSD data disk | ~$10/mo | Slower database. Probably noticeable. |
 | Turn off Azure Backup | ~$15/mo | **Do not.** It is the only thing that restores uploaded files. |
 
-A small pilot on a `D2s_v3` with a reserved instance lands around **$100/month**.
+A small pilot on the current `Standard_D2s_v5` with a reserved instance lands around
+**$100/month**.
 
 !!! tip "Non-profit and grant credits"
     Microsoft offers substantial Azure credits to eligible non-profits, and
@@ -74,8 +78,8 @@ documents can exceed everyone else combined.
 | Web search (Serper, Firecrawl, Jina) | $0–50, usage-based |
 | Speech to text | Usage-based, small |
 
-The code interpreter roughly doubles infrastructure cost. Decide whether you want the
-capability before building it.
+The code interpreter adds roughly $85/month to the infrastructure bill. Decide whether
+you want the capability before building it.
 
 ## What is free
 
@@ -90,9 +94,9 @@ A 200-user deployment, no code interpreter, no reserved instance:
 
 | | |
 |---|---|
-| Infrastructure | $2,400 |
+| Infrastructure | $1,440–1,680 |
 | AI usage | $3,000–9,000 |
-| **Total** | **$5,400–11,400** |
+| **Total** | **$4,440–10,680** |
 
 Plus staff time. Budget a week for the initial deployment including the compliance
 conversation, and a few hours a month afterwards — mostly reviewing upgrade pull

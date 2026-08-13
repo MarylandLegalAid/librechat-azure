@@ -84,10 +84,10 @@ server entirely** rather than merely discouraged — page images have to stay wi
 vendor the agreement covers. Both values now fail at container boot.
 
 **Local OCR still does not fit the machine**, and that has not changed. Tesseract or
-PaddleOCR would keep the pages on your own hardware, but the VM this blueprint
-provisions is `Standard_D4s_v5` — four vCPUs shared by the app, MongoDB, Meilisearch,
-pgvector and the RAG service. A multi-page scan would saturate the CPU everything else
-is sharing and would likely exceed the tool-call timeout.
+PaddleOCR would keep the pages on your own hardware, but the live deployment runs on
+`Standard_D2s_v5` — two vCPUs shared by the app, MongoDB, Meilisearch, pgvector and the
+RAG service. A multi-page scan would saturate the CPU everything else is sharing and
+would likely exceed the tool-call timeout.
 
 ### The carve-out ZDR does not close
 

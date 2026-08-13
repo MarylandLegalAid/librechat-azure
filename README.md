@@ -28,7 +28,8 @@ lists — without deriving them again.
 
 ## What you get
 
-- **LibreChat** on your own Azure VM, behind TLS that renews itself
+- **LibreChat** on your own Azure VM, currently `Standard_D2s_v5`
+  (2 vCPU / 8 GB), behind TLS that renews itself
 - **Your models** — Anthropic, OpenAI, or both, on your own API keys
 - **Your branding** — name, logo, welcome message, terms of service users must accept
 - **Your users only** — email and password with a domain allowlist, or your existing
@@ -37,7 +38,7 @@ lists — without deriving them again.
 - **Optional custom tools** so the model can reach your own systems
 - **Automatic updates, backups and monitoring**, configured rather than assumed
 
-Roughly **$150–200/month** in Azure for a few hundred users, plus model usage.
+Roughly **$120–140/month** in Azure for a few hundred users, plus model usage.
 [Itemized](https://marylandlegalaid.github.io/librechat-azure/cost-model/).
 
 ## Getting started
