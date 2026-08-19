@@ -174,12 +174,12 @@ test('the provider string matches the custom endpoint name byte for byte', () =>
   assert.strictEqual(plan.set.provider, 'OpenAI GPT-5.6 Responses');
 });
 
-test('an Anthropic agent changes model but keeps its provider', () => {
+test('an Opus 5 agent changes model but keeps its Anthropic provider', () => {
   const plan = planAgentChanges(
-    agent({ model: 'claude-opus-4-7', provider: 'anthropic' }),
+    agent({ model: 'claude-opus-5', provider: 'anthropic' }),
     OPTS,
   );
-  assert.strictEqual(plan.set.model, 'claude-opus-5');
+  assert.strictEqual(plan.set.model, 'claude-opus-4-8');
   assert.ok(!Object.prototype.hasOwnProperty.call(plan.set, 'provider'));
   assert.strictEqual(plan.changes.length, 1);
 });
@@ -373,7 +373,7 @@ test('the production distribution produces exactly the expected plan', () => {
   // 14 = 5 nano + 5 gpt-5.4-mini + 3 gpt-4.1 + 1 gpt-5-mini
   assert.strictEqual(summary.byTarget['gpt-5.6-luna'].count, 14);
   assert.strictEqual(summary.byTarget['gpt-5.6-terra'].count, 6);
-  assert.strictEqual(summary.byTarget['claude-opus-5'].count, 3);
+  assert.strictEqual(summary.byTarget['claude-opus-4-8'].count, 3);
   assert.ok(!summary.byTarget['gpt-5.6-sol'], 'gpt-5.6-sol is approved but is not a target');
 
   // 20 agents move onto the custom endpoint (14 luna + 6 terra); the 3 Anthropic

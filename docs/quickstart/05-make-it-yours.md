@@ -66,7 +66,7 @@ Drop your files into `client/public/assets/` and they replace the defaults. See
 `env.defaults` holds the models users can choose:
 
 ```
-ANTHROPIC_MODELS=claude-opus-5,claude-sonnet-5,claude-haiku-4-5
+ANTHROPIC_MODELS=claude-opus-4-8,claude-sonnet-5,claude-haiku-4-5
 ```
 
 !!! warning "There is no `OPENAI_MODELS`, and that is deliberate"

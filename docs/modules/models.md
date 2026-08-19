@@ -8,7 +8,7 @@ at, which needs a migration.
 `env.defaults`:
 
 ```
-ANTHROPIC_MODELS=claude-opus-5,claude-sonnet-5,claude-haiku-4-5
+ANTHROPIC_MODELS=claude-opus-4-8,claude-sonnet-5,claude-haiku-4-5
 ```
 
 There is no `OPENAI_MODELS`. The built-in `openAI` endpoint was retired on
@@ -142,7 +142,7 @@ The migration runs these itself, but they are worth knowing:
 db.agents.aggregate([
   { $group: { _id: "$model", n: { $sum: 1 } } },
   { $match: { _id: { $nin: [
-      "claude-opus-5","claude-sonnet-5","claude-haiku-4-5",
+      "claude-opus-4-8","claude-sonnet-5","claude-haiku-4-5",
       "gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna" ] } } }
 ])
 
