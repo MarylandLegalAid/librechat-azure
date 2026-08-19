@@ -19,7 +19,7 @@
  * these is finished, whatever else is true about it.
  */
 const APPROVED_MODELS = [
-  'claude-opus-5',
+  'claude-opus-4-8',
   'claude-sonnet-5',
   'claude-haiku-4-5',
   'gpt-5.6-sol',
