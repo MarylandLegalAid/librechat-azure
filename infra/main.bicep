@@ -729,7 +729,9 @@ resource osDiskSpaceAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = 
             | where Origin == "vm.azm.ms"
             | where Namespace == "LogicalDisk" and Name == "FreeSpacePercentage"
             | extend MountId = tostring(todynamic(Tags)["vm.azm.ms/mountId"])
-            | where MountId == "/" and Val < 10
+            | where MountId == "/"
+            | summarize AverageFreeSpacePercentage = avg(Val)
+            | where AverageFreeSpacePercentage < 10
           '''
           timeAggregation: 'Count'
           operator: 'GreaterThan'

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "4975213685629149456"
+      "templateHash": "15129509343505015791"
     }
   },
   "parameters": {
@@ -714,7 +714,7 @@
         "criteria": {
           "allOf": [
             {
-              "query": "            InsightsMetrics\n            | where Origin == \"vm.azm.ms\"\n            | where Namespace == \"LogicalDisk\" and Name == \"FreeSpacePercentage\"\n            | extend MountId = tostring(todynamic(Tags)[\"vm.azm.ms/mountId\"])\n            | where MountId == \"/\" and Val < 10\n          ",
+              "query": "            InsightsMetrics\n            | where Origin == \"vm.azm.ms\"\n            | where Namespace == \"LogicalDisk\" and Name == \"FreeSpacePercentage\"\n            | extend MountId = tostring(todynamic(Tags)[\"vm.azm.ms/mountId\"])\n            | where MountId == \"/\"\n            | summarize AverageFreeSpacePercentage = avg(Val)\n            | where AverageFreeSpacePercentage < 10\n          ",
               "timeAggregation": "Count",
               "operator": "GreaterThan",
               "threshold": 0,
