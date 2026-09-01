@@ -112,8 +112,9 @@ az deployment group show \
 ## What just happened
 
 The machine is now booting and setting itself up: installing Docker, formatting and
-mounting the data disk, and cloning this repository. That takes another five minutes
-or so after Azure reports success.
+mounting the data disk, cloning this repository, and installing the automatic deploy,
+backup, and host-storage maintenance timers. That takes another five minutes or so
+after Azure reports success.
 
 **The application is not running, and that is correct.** It has no secrets yet, so
 starting it now would produce a misconfigured instance that then has to be repaired

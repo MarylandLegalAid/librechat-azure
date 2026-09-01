@@ -31,9 +31,10 @@ mechanism only one party uses is a mechanism only one party finds the bugs in.
 
 ## Infrastructure is a separate deploy, and it is not automated
 
-Everything on this page deploys the **application** — containers, configuration, `.env`.
-It never touches the VM, the disk, the network security group, or the alerts. Those come
-from the Bicep template in `infra/`, and nothing applies it automatically:
+Everything on this page deploys the **application** — containers, configuration, `.env`
+— and keeps the versioned host-maintenance systemd units current. It never changes the
+Azure VM resource, disks, network security group, or alerts. Those come from the Bicep
+template in `infra/`, and nothing applies it automatically:
 
 ```bash
 az deployment group create \
@@ -88,15 +89,16 @@ A **stale** file is the dangerous case, because it deploys cleanly.
 2. Records the current commit, for rollback.
 3. Fast-forwards to `origin/main`. **If nothing changed and `--force` was not given,
    it stops here** — which is what makes a five-minute timer nearly free.
-4. Rebuilds `.env` from Azure Key Vault.
-5. Merges `librechat.yaml` with the storage overlay into `librechat.runtime.yaml`.
-6. Pulls images.
-7. Starts containers.
-8. Polls `/health` for up to two minutes.
-9. **If that fails**: rolls back to the previous commit, starts it again, and exits
+4. Installs or updates the weekly host-storage maintenance timer.
+5. Rebuilds `.env` from Azure Key Vault.
+6. Merges `librechat.yaml` with the storage overlay into `librechat.runtime.yaml`.
+7. Pulls images.
+8. Starts containers.
+9. Polls `/health` for up to two minutes.
+10. **If that fails**: rolls back to the previous commit, starts it again, and exits
    non-zero.
 
-Step 8 matters more than it looks. A container being "running" is not the same as the
+Step 9 matters more than it looks. A container being "running" is not the same as the
 application working — a crash-looping container and one stuck on bad configuration
 both report as up to Docker. Asking the application whether it is working is the only
 check that means anything.

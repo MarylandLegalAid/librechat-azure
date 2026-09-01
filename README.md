@@ -61,9 +61,9 @@ librechat.yaml            application config; merged with a storage overlay at d
 config/storage/           the two overlays, and why they exist
 env.defaults              non-secret defaults, committed
 .env.example              every variable, documented, no values
-infra/                    Bicep: VM, network, data disk, Key Vault, backup, alerts
+infra/                    Bicep plus versioned host systemd units
 scripts/deploy.sh         THE deploy path — both triggers run this
-scripts/                  secrets rendering, backup, restore, agent migration
+scripts/                  secrets, backup, restore, migrations, host maintenance
 docs/                     the documentation site
 ```
 
