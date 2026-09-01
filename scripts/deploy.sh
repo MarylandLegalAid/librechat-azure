@@ -18,6 +18,7 @@
 #     1.  take a lock, so two runs cannot overlap
 #     2.  remember the current commit, for rollback
 #     3.  fast-forward to origin/main; stop here if nothing changed
+#     3b. install or update the weekly host-maintenance timer
 #     4.  rebuild .env from Azure Key Vault
 #     5.  merge librechat.yaml with the storage and MCP overlays
 #     6.  pull images
@@ -155,6 +156,15 @@ if [ "$REEXECED" = false ] && [ "$CURRENT_SHA" != "$PREVIOUS_SHA" ] \
   log "deploy.sh changed in this update; re-executing the new version"
   exec "$REPO_ROOT/scripts/deploy.sh" --reexeced --force
 fi
+
+
+# -----------------------------------------------------------------------------
+# 3c. Keep the host-maintenance units in sync with the repository.
+# -----------------------------------------------------------------------------
+# Existing machines do not re-run cloud-init when this capability is added or
+# changed. Installing it through the one deploy path upgrades them as naturally
+# as a Compose or application configuration change.
+"$REPO_ROOT/scripts/install-host-maintenance.sh"
 
 
 # -----------------------------------------------------------------------------

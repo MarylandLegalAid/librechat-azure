@@ -539,18 +539,35 @@ It is edits to the `Caddyfile` alone that do.
 ## The disk filled up
 
 ```bash
-df -h /srv/librechat/data
-du -sh /srv/librechat/data/* | sort -h
+df -h / /srv/librechat/data
+sudo du -xhd1 /var/lib/docker /var/lib/containerd /home 2>/dev/null | sort -h
+sudo du -xhd1 /srv/librechat/data | sort -h
 ```
 
-Usual culprits: local backup staging that failed to clean up, and Docker images from
-past versions.
+The two filesystems have different jobs. `/` is the OS disk and normally grows because
+of container images or developer tooling. `/srv/librechat/data` holds the databases,
+uploads, letters and backups.
+
+Container logs are already bounded at five 10 MB files per service. A weekly timer
+also prunes images created more than seven days ago that no container references, plus
+inactive VS Code Server builds older than 30 days. Check it before doing anything
+manually:
 
 ```bash
-docker image prune -a --filter "until=168h"
+systemctl status librechat-host-maintenance.timer
+journalctl -u librechat-host-maintenance.service --since '30 days ago'
+sudo /srv/librechat/app/scripts/host-maintenance.sh --dry-run
 ```
 
-Growing the data disk is a portal operation and does not need a rebuild.
+Apply the same conservative cleanup immediately with `--apply`. It never removes an
+image referenced by a container or a VS Code build that is running. Removed images and
+server builds are recoverable by downloading them again.
+
+If the data disk itself is full, look for failed local backup staging as well as real
+application growth. Growing either Azure disk does not require a rebuild, although
+Azure may require a VM stop/start. The current image expands the OS filesystem during
+boot; a data-disk filesystem may still need `resize2fs` after its Azure disk is
+expanded.
 
 ## Everything is slow
 

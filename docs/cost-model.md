@@ -11,7 +11,7 @@ For a few hundred users, in `eastus2`, pay-as-you-go:
 | Resource | Spec | Approx. per month |
 |---|---|---|
 | Virtual machine | `Standard_D2s_v5`, 2 vCPU / 8 GB | $70 |
-| OS disk | Premium SSD, 30 GB | $5 |
+| OS disk | Premium SSD, 128 GB | $19 |
 | Data disk | Premium SSD, 128 GB | $19 |
 | Public IP | Standard, static | $4 |
 | Azure Backup | Daily, 30-day retention | $10–20 |
@@ -19,7 +19,7 @@ For a few hundred users, in `eastus2`, pay-as-you-go:
 | Key Vault | A few dozen secrets | $1 |
 | Monitoring | Alerts + one availability test | $2 |
 | Bandwidth | Egress | $5–15 |
-| | **Total** | **≈ $120–140** |
+| | **Total** | **≈ $135–155** |
 
 ### Making it cheaper
 
@@ -34,7 +34,7 @@ from:
 | Turn off Azure Backup | ~$15/mo | **Do not.** It is the only thing that restores uploaded files. |
 
 A small pilot on the current `Standard_D2s_v5` with a reserved instance lands around
-**$100/month**.
+**$115/month**.
 
 !!! tip "Non-profit and grant credits"
     Microsoft offers substantial Azure credits to eligible non-profits, and
@@ -94,9 +94,9 @@ A 200-user deployment, no code interpreter, no reserved instance:
 
 | | |
 |---|---|
-| Infrastructure | $1,440–1,680 |
+| Infrastructure | $1,620–1,860 |
 | AI usage | $3,000–9,000 |
-| **Total** | **$4,440–10,680** |
+| **Total** | **$4,620–10,860** |
 
 Plus staff time. Budget a week for the initial deployment including the compliance
 conversation, and a few hours a month afterwards — mostly reviewing upgrade pull

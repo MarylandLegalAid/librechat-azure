@@ -25,7 +25,7 @@ a blueprint nobody runs quietly stops working, and you would be the one to find 
 
 ## What it costs
 
-The current host is `Standard_D2s_v5` (2 vCPU / 8 GB). Roughly **$120–140 per month**
+The current host is `Standard_D2s_v5` (2 vCPU / 8 GB). Roughly **$135–155 per month**
 in Azure for a few hundred users, plus whatever your model provider charges for usage.
 [Real numbers, itemized](cost-model.md).
 

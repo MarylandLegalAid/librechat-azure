@@ -153,6 +153,24 @@ s3_mounts="$(docker compose --env-file "$FIXTURE_ENV" -f compose.yaml -f compose
 
 
 # =============================================================================
+group "Every container has bounded JSON logs"
+# =============================================================================
+# Docker's json-file driver grows forever unless both limits are set. Check the
+# rendered alias on every service so adding one without the shared policy fails
+# before it reaches a host.
+
+while IFS=$'\t' read -r service driver max_size max_file; do
+  if [ "$driver" = "json-file" ] && [ "$max_size" = "10m" ] && [ "$max_file" = "5" ]; then
+    pass "$service logs are bounded at 10m × 5"
+  else
+    fail "$service logging is '$driver / $max_size / $max_file', expected 'json-file / 10m / 5'"
+  fi
+done < <(
+  yq -r '.services | to_entries[] | [.key, .value.logging.driver, .value.logging.options."max-size", .value.logging.options."max-file"] | @tsv' compose.yaml
+)
+
+
+# =============================================================================
 group "No container port is exposed beyond localhost, except Caddy's"
 # =============================================================================
 # The hardening rule that stops the network firewall from being the only thing
@@ -511,6 +529,48 @@ if [ "$env_data_dir" = "$bicep_data_dir" ]; then
   pass "DATA_DIR = $env_data_dir in both"
 else
   fail "DATA_DIR differs: env.defaults='$env_data_dir' but main.bicep='$bicep_data_dir'"
+fi
+
+
+# =============================================================================
+group "Infrastructure defaults and host retention match production"
+# =============================================================================
+
+bicep_vm_size="$(grep -oP "param vmSize string = '\K[^']+" infra/main.bicep)"
+example_vm_size="$(jq -r '.parameters.vmSize.value' infra/main.parameters.example.json)"
+bicep_os_disk="$(grep -oP 'param osDiskSizeGb int = \K[0-9]+' infra/main.bicep)"
+example_os_disk="$(jq -r '.parameters.osDiskSizeGb.value' infra/main.parameters.example.json)"
+
+[ "$bicep_vm_size" = "Standard_D2s_v5" ] \
+  && pass "Bicep VM default is Standard_D2s_v5" \
+  || fail "Bicep VM default is '$bicep_vm_size', expected Standard_D2s_v5"
+[ "$example_vm_size" = "Standard_D2s_v5" ] \
+  && pass "example VM size is Standard_D2s_v5" \
+  || fail "example VM size is '$example_vm_size', expected Standard_D2s_v5"
+[ "$bicep_os_disk" = "128" ] && [ "$example_os_disk" = "128" ] \
+  && pass "Bicep and example OS disk defaults are 128 GB" \
+  || fail "OS disk defaults differ from production: Bicep='$bicep_os_disk', example='$example_os_disk'"
+
+if bash -n scripts/host-maintenance.sh scripts/install-host-maintenance.sh; then
+  pass "host-maintenance scripts parse"
+else
+  fail "host-maintenance scripts do not parse"
+fi
+
+if grep -Fq 'ExecStart=/srv/librechat/app/scripts/host-maintenance.sh --apply' \
+     infra/systemd/librechat-host-maintenance.service \
+   && grep -Fq 'OnCalendar=Sun *-*-* 04:17:00 UTC' \
+     infra/systemd/librechat-host-maintenance.timer; then
+  pass "weekly host-maintenance service applies the versioned cleanup policy"
+else
+  fail "host-maintenance systemd units are missing their command or weekly schedule"
+fi
+
+if grep -Fq 'scripts/install-host-maintenance.sh' scripts/deploy.sh \
+   && grep -Fq 'scripts/install-host-maintenance.sh' infra/cloud-init.yaml; then
+  pass "new and existing hosts install the host-maintenance timer"
+else
+  fail "host-maintenance timer is not installed by both cloud-init and deploy.sh"
 fi
 
 

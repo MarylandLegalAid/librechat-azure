@@ -113,14 +113,14 @@
 
     "vmSize": {
       "_comment": [
-        "4 vCPU / 16 GB runs the whole stack comfortably for a few hundred users.",
-        "Standard_D2s_v3 (2/8) works for a small pilot and costs about half.",
-        "docs/cost-model.md has real numbers.",
+        "Standard_D2s_v5 (2 vCPU / 8 GB) is the production size and Bicep default.",
+        "Use a larger size temporarily when a migration needs extra headroom.",
+        "docs/cost-model.md has current numbers.",
         "",
         "Resizing later is a reboot, not a rebuild — the data disk is a separate",
         "resource and comes with you."
       ],
-      "value": "Standard_D4s_v5"
+      "value": "Standard_D2s_v5"
     },
 
     "osDiskSizeGb": {

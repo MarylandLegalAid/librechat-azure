@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly cleanup of old LibreChat host artifacts
+
+[Timer]
+OnCalendar=Sun *-*-* 04:17:00 UTC
+Persistent=true
+RandomizedDelaySec=900
+Unit=librechat-host-maintenance.service
+
+[Install]
+WantedBy=timers.target

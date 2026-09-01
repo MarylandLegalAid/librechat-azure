@@ -4,7 +4,7 @@
 # =============================================================================
 # Runs once, automatically, the first time the machine starts. It prepares the
 # host and stops: Docker, the data disk, a checkout of the deployment
-# repository, and the timers that keep it up to date.
+# repository, and the timers that keep it up to date and keep its OS disk tidy.
 #
 # It deliberately does NOT start the application. At this point in the story
 # there are no secrets in the key vault yet, so a stack started here would come
@@ -181,6 +181,14 @@ write_files:
       log "fetching the repository"
       /usr/local/sbin/librechat-bootstrap.sh || \
         log "bootstrap deferred — re-run it once the key vault is seeded"
+
+      # The maintenance units are versioned in the repository. If the initial
+      # clone was deferred, the first deploy installs them instead.
+      if [ -x /srv/librechat/app/scripts/install-host-maintenance.sh ]; then
+        /srv/librechat/app/scripts/install-host-maintenance.sh
+      else
+        log "host-maintenance timer deferred until the first deploy"
+      fi
 
       # --- Timers ----------------------------------------------------------
       # Enabled, not started. Nothing deploys until a human runs the first

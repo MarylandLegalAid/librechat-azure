@@ -27,6 +27,11 @@ patches — happens on its own.
   watching.
 - **Backups**, nightly database dump and daily whole-machine.
 - **Monitoring**, emailing you when something breaks.
+- **Container log rotation.** Every service, including MongoDB, is capped at five
+  10 MB JSON log files instead of growing forever.
+- **Host storage cleanup.** Weekly, Docker images older than seven days that no
+  container references and inactive VS Code Server builds older than 30 days are
+  removed from the OS disk.
 
 ## Reboots
 
@@ -61,6 +66,7 @@ Alerts go to `alertEmail` from the deployment.
 |---|---|
 | `health-unavailable` | **The site is down.** Act now. |
 | `cpu-high`, `memory-low` | Usually load growth, occasionally a runaway container. |
+| `os-disk-space-low` | The root filesystem has less than 10% free; inspect Docker and developer tooling. |
 | `os-disk-iops-high`, `data-disk-iops-high` | At the disk's throughput limit; everything is slow. |
 | `network-out-high` | Worth a look — unusual outbound traffic. |
 | `vm-unavailable` | Azure reports the machine itself as unavailable. |
@@ -128,6 +134,40 @@ vault.
     recovery.
 
     Every other secret here is safe to rotate. These two are not.
+
+## Host storage retention
+
+The OS and data disks are intentionally separate. Persistent application state is
+under `/srv/librechat/data`; Docker images, Docker's bounded JSON logs, and Remote SSH
+VS Code Server builds are on the OS disk.
+
+Compose caps each container at approximately 50 MB of JSON logs (`10 MB × 5`). The
+weekly `librechat-host-maintenance.timer` then removes:
+
+- Docker images created at least seven days ago that no container references. Running
+  images are never candidates, and a removed image is pulled again automatically if a
+  rollback later needs it.
+- VS Code Server builds older than 30 days, unless a process from that exact build is
+  running. Remote SSH downloads a removed build again if it is needed later.
+
+Inspect the schedule and the last run:
+
+```bash
+systemctl list-timers librechat-host-maintenance.timer
+journalctl -u librechat-host-maintenance.service --since '30 days ago'
+```
+
+Preview or apply the exact cleanup by hand:
+
+```bash
+sudo /srv/librechat/app/scripts/host-maintenance.sh --dry-run
+sudo /srv/librechat/app/scripts/host-maintenance.sh --apply
+```
+
+The cleanup does not touch `/srv/librechat/data`, Docker volumes, containers, or any
+VS Code build that is currently running. Its seven- and 30-day windows can be changed
+for one run with `LIBRECHAT_DOCKER_IMAGE_RETENTION_HOURS` and
+`LIBRECHAT_VSCODE_SERVER_RETENTION_DAYS`.
 
 ## Costs
 

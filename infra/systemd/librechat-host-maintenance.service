@@ -1,0 +1,14 @@
+[Unit]
+Description=Prune old LibreChat host artifacts
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/librechat/app/scripts/host-maintenance.sh --apply
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+StandardOutput=journal
+StandardError=journal

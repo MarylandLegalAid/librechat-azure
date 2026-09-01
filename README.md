@@ -38,7 +38,7 @@ lists — without deriving them again.
 - **Optional custom tools** so the model can reach your own systems
 - **Automatic updates, backups and monitoring**, configured rather than assumed
 
-Roughly **$120–140/month** in Azure for a few hundred users, plus model usage.
+Roughly **$135–155/month** in Azure for a few hundred users, plus model usage.
 [Itemized](https://marylandlegalaid.github.io/librechat-azure/cost-model/).
 
 ## Getting started
@@ -81,9 +81,10 @@ own managed identity, so there is no credential on disk anywhere. `.env` is gene
 at deploy time and never committed. `gitleaks` runs over the full history on every
 push.
 
-**Data on a separate disk.** Databases, uploaded files and letterheads live on a
-mounted data disk, so the OS disk can be rebuilt or the VM resized without touching
-data. Azure Backup protects it.
+**Data on a separate disk.** The 128 GB OS disk holds the operating system, container
+images and bounded container logs. Databases, uploaded files and letterheads live on a
+separate 128 GB mounted data disk, so the OS disk can be rebuilt or the VM resized
+without touching data. Azure Backup protects the data disk.
 
 ## Contributing
 

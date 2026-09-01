@@ -55,8 +55,8 @@ param location string = resourceGroup().location
 @allowed(['1', '2', '3'])
 param availabilityZone string = '2'
 
-@description('Virtual machine size. 4 vCPU / 16 GB comfortably runs the whole stack for a few hundred users. See docs/cost-model.md before changing it.')
-param vmSize string = 'Standard_D4s_v5'
+@description('Virtual machine size. The production default is 2 vCPU / 8 GB; resize temporarily if a migration needs more headroom. See docs/cost-model.md before changing it.')
+param vmSize string = 'Standard_D2s_v5'
 
 @description('Size of the OS disk in GB. Container images and bounded Docker logs live here; persistent application data remains on the separate data disk.')
 @minValue(64)
