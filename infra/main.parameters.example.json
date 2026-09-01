@@ -123,6 +123,15 @@
       "value": "Standard_D4s_v5"
     },
 
+    "osDiskSizeGb": {
+      "_comment": [
+        "Docker images and bounded container logs live on the disposable OS disk.",
+        "Persistent databases and uploaded files remain on the separate data disk.",
+        "128 GB also raises the Premium SSD performance tier above the image default."
+      ],
+      "value": 128
+    },
+
     "dataDiskSizeGb": {
       "_comment": [
         "Databases, uploaded files, letterheads and local backups all live here.",

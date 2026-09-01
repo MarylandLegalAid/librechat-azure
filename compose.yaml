@@ -24,6 +24,16 @@
 
 name: librechat
 
+# Docker's json-file driver does not rotate unless limits are set explicitly.
+# Keep enough recent output for troubleshooting without allowing a noisy
+# dependency (MongoDB connection logs were the first offender) to fill the OS
+# disk. A container must be recreated once for these settings to take effect.
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
 
   # ---------------------------------------------------------------------------
@@ -40,6 +50,7 @@ services:
     image: caddy:2-alpine
     container_name: caddy
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "80:80"
       - "443:443"
@@ -74,6 +85,7 @@ services:
     image: ghcr.io/danny-avila/librechat:v0.8.7
     container_name: LibreChat
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "127.0.0.1:3080:3080"
     env_file: .env
@@ -154,6 +166,7 @@ services:
     image: registry.librechat.ai/clickhouse/librechat-admin-panel:latest
     container_name: admin-panel
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "127.0.0.1:3000:3000"
     environment:
@@ -182,6 +195,7 @@ services:
     image: mongo:8.0.20
     container_name: chat-mongodb
     restart: unless-stopped
+    logging: *default-logging
     command: mongod --noauth
     volumes:
       - ${DATA_DIR}/mongo:/data/db
@@ -201,6 +215,7 @@ services:
     image: getmeili/meilisearch:v1.35.1
     container_name: chat-meilisearch
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MEILI_HOST: http://meilisearch:7700
       MEILI_NO_ANALYTICS: "true"
@@ -218,6 +233,7 @@ services:
     image: pgvector/pgvector:0.8.0-pg15-trixie
     container_name: vectordb
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-librechat}
       POSTGRES_USER: ${POSTGRES_USER:-librechat}
@@ -240,6 +256,7 @@ services:
     image: registry.librechat.ai/danny-avila/librechat-rag-api-dev-lite:latest
     container_name: rag_api
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env
     environment:
       DB_HOST: vectordb
@@ -267,6 +284,7 @@ services:
     container_name: legalserver-mcp
     profiles: ["mcp-legalserver"]
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env
     environment:
       MCP_HTTP_HOST: 0.0.0.0
@@ -286,6 +304,7 @@ services:
     container_name: letterwriter-mcp
     profiles: ["mcp-letterwriter"]
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env
     environment:
       MCP_HTTP_HOST: 0.0.0.0

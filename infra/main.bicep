@@ -58,6 +58,11 @@ param availabilityZone string = '2'
 @description('Virtual machine size. 4 vCPU / 16 GB comfortably runs the whole stack for a few hundred users. See docs/cost-model.md before changing it.')
 param vmSize string = 'Standard_D4s_v5'
 
+@description('Size of the OS disk in GB. Container images and bounded Docker logs live here; persistent application data remains on the separate data disk.')
+@minValue(64)
+@maxValue(4095)
+param osDiskSizeGb int = 128
+
 @description('Local administrator account name for the virtual machine.')
 param adminUsername string = 'azureuser'
 
@@ -315,6 +320,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
       }
       osDisk: {
         createOption: 'FromImage'
+        diskSizeGB: osDiskSizeGb
         managedDisk: {
           storageAccountType: 'Premium_LRS'
         }
@@ -696,6 +702,50 @@ resource vmMetricAlerts 'Microsoft.Insights/metricAlerts@2018-03-01' = [
     }
   }
 ]
+
+// Host metrics expose disk throughput but not filesystem capacity. VM Insights
+// supplies the missing guest measurement through InsightsMetrics. Scope the
+// query to the VM and the root mount explicitly so Docker overlay mounts do not
+// create duplicate alert series for the same underlying filesystem.
+resource osDiskSpaceAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {
+  name: '${namePrefix}-${environment}-os-disk-space-low'
+  location: location
+  kind: 'LogAlert'
+  tags: tags
+  properties: {
+    displayName: 'LibreChat production OS disk space low'
+    description: 'The root filesystem has less than 10% free space. Container image cleanup or disk expansion is required.'
+    severity: 2
+    enabled: true
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    scopes: [vm.id]
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: '''
+            InsightsMetrics
+            | where Origin == "vm.azm.ms"
+            | where Namespace == "LogicalDisk" and Name == "FreeSpacePercentage"
+            | extend MountId = tostring(todynamic(Tags)["vm.azm.ms/mountId"])
+            | where MountId == "/" and Val < 10
+          '''
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [actionGroup.id]
+    }
+  }
+}
 
 // --- The alert that closes the real gap --------------------------------------
 // Every metric above can look perfectly healthy while the application is down.
