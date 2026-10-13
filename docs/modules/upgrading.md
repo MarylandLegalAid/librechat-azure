@@ -156,8 +156,8 @@ worse than saying so. For a high-stakes upgrade, deploy a second instance from t
 same template pointed at a restored copy of your data, test there, then upgrade
 production. `scripts/restore.sh` makes that about a twenty-minute exercise.
 
-!!! warning "A restored copy is not a faithful copy until you fix two things"
-    Conversation search and document chat both come back broken from a database restore,
-    and neither reports it — so an upgrade tested against a naive restore tells you
-    nothing about either. See
-    [Test your restore](backups.md#test-your-restore) before you trust the comparison.
+!!! warning "Use `restore.sh`, not a bare `mongorestore`"
+    Conversation search and document chat both come back broken from a naive database
+    restore, and neither reports it, so an upgrade tested against one tells you nothing
+    about either. `scripts/restore.sh` restores the vector database too, rebuilds search,
+    and checks both. See [Test your restore](backups.md#test-your-restore).
