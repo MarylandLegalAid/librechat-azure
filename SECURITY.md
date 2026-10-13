@@ -26,7 +26,7 @@ This repository is a **deployment blueprint**. In scope:
 
 **Out of scope**, because we did not write them and cannot fix them:
 
-- LibreChat itself → [LibreChat security policy](https://github.com/danny-avila/LibreChat/security)
+- LibreChat itself → [LibreChat security policy](https://github.com/LibreChat-AI/LibreChat/security)
 - MongoDB, Meilisearch, pgvector, Caddy, Docker, Azure
 - Your own deployment's configuration
 

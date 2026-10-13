@@ -81,8 +81,14 @@ services:
   # and stayed there. renovate.json watches this line and opens a pull request
   # on each new release, so upgrades become a reviewed decision instead of a
   # surprise on restart.
+  #
+  # The upstream organization was renamed from danny-avila to LibreChat-AI in
+  # 2026, and releases after v0.8.8-rc4 are published ONLY under the new name.
+  # The old name still resolves, so nothing breaks: the deployment just stops
+  # being offered upgrades. If Renovate goes quiet for longer than upstream's
+  # release cadence, check the image path before assuming there is nothing new.
   api:
-    image: ghcr.io/danny-avila/librechat:v0.8.7
+    image: ghcr.io/librechat-ai/librechat:v0.8.7
     container_name: LibreChat
     restart: unless-stopped
     logging: *default-logging
@@ -162,8 +168,13 @@ services:
   # ADMIN_PANEL_SESSION_SECRET is REQUIRED — the panel refuses to start without
   # it. It is new in v0.8.7 and is the variable most likely to be missed when
   # upgrading from an older version.
+  #
+  # Upstream publishes only `latest`, so this is pinned by digest: `deploy.sh`
+  # pulls on every deploy, and a bare `latest` would upgrade the panel as a side
+  # effect of any unrelated commit. Renovate proposes digest bumps as pull
+  # requests.
   admin-panel:
-    image: registry.librechat.ai/clickhouse/librechat-admin-panel:latest
+    image: registry.librechat.ai/clickhouse/librechat-admin-panel:latest@sha256:a395465d1daa3c11495810a8c224df86675985d50de42e98e36eeedbd8aecb94
     container_name: admin-panel
     restart: unless-stopped
     logging: *default-logging
@@ -252,8 +263,11 @@ services:
   # EMBEDDINGS_MODEL comes from .env and is FROZEN — changing it invalidates
   # every vector already stored here, and file chat returns confident nonsense
   # until every document is re-uploaded. See docs/modules/models.md.
+  #
+  # Pinned by digest for the same reason as the admin panel: upstream publishes
+  # only `latest`. Renovate proposes digest bumps as pull requests.
   rag_api:
-    image: registry.librechat.ai/danny-avila/librechat-rag-api-dev-lite:latest
+    image: registry.librechat.ai/librechat-ai/librechat-rag-api-dev-lite:latest@sha256:f9f34c8ed6884b0ff9b17387e6174fed737dba29f21622ecb75604d82bc47bf8
     container_name: rag_api
     restart: unless-stopped
     logging: *default-logging

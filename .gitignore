@@ -70,6 +70,7 @@ infra/main.parameters.json
 # out, rather than committing the original.
 IMPLEMENTATION_PLAN.md
 MIGRATION_PLAN.md
+UPGRADE_PLAN.md
 HANDOFF.md
 START-HERE.md
 *-recon.md

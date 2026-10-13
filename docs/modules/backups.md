@@ -5,7 +5,7 @@ Two backups. They protect against different things, and you need both.
 | | What it protects | How you restore |
 |---|---|---|
 | **Azure Backup** | The whole machine, including the data disk — so **uploaded files**, letterheads and certificates | Azure Portal, restore the VM or a disk |
-| **Nightly database dump** | The database only: users, conversations, agents | `scripts/restore.sh` |
+| **Nightly database dump** | The databases only: users, conversations, agents, and the document-chat embeddings | `scripts/restore.sh` |
 
 Azure Backup is the one that brings uploaded files back. Now that files live on the
 data disk rather than in an object store, nothing else does.
@@ -13,6 +13,12 @@ data disk rather than in an object store, nothing else does.
 The database dump is small, portable, and restores onto any host with MongoDB —
 including a laptop. It exists because a whole-machine restore is a heavy instrument
 for "somebody deleted a conversation".
+
+Each night produces **two files with the same timestamp**: `librechat-<time>.archive.gz`
+(MongoDB) and `vectordb-<time>.sql.gz` (the embeddings from pgvector, data only). They
+belong together. MongoDB holds the record of each uploaded document; pgvector holds what
+the document says. `restore.sh` pairs them by timestamp and refuses to restore one without
+the other unless you tell it to.
 
 ## Both are on by default
 
@@ -50,7 +56,9 @@ az storage blob list \
   --output table
 ```
 
-You want a blob from last night, tens of megabytes in size.
+You want a `librechat-` and a `vectordb-` blob from last night, each tens of megabytes or
+more. If the vector dump fails, the script still uploads the MongoDB dump and then exits
+with an error, so the timer shows as failed.
 
 The dump script refuses to upload anything smaller than a megabyte. A dump measured in
 kilobytes means `mongodump` wrote an error where your data should be, and uploading it
@@ -58,13 +66,13 @@ would quietly replace a good backup with a useless one.
 
 ## Test your restore
 
-**An untested backup is not a backup.** This takes five minutes and is the only way
-to find out which one you have.
+**An untested backup is not a backup.** This takes about fifteen minutes and is the
+only way to find out which one you have.
 
 Do it quarterly. Put it in a calendar.
 
 ```bash
-# Restore the most recent nightly dump. THIS REPLACES THE DATABASE —
+# Restore the most recent nightly backup. THIS REPLACES THE DATABASES —
 # do it on staging, or on a machine you are willing to lose.
 scripts/restore.sh --from-blob latest
 ```
@@ -72,32 +80,41 @@ scripts/restore.sh --from-blob latest
 The script tells you how many user accounts it is about to destroy and makes you type
 `restore` to continue.
 
-After it finishes: sign in, open an old conversation, and **search for a phrase you know
-exists**. Then ask a document-chat question about a file that was indexed before the
-restore.
+### What the script restores, and what it checks
 
-!!! danger "Two things a database restore does not bring back, and neither reports a problem"
-    **The restore test passes with both of these broken.** The database comes back, the
-    site loads, and you would only notice by searching or by asking about an old
-    document.
+A LibreChat backup is three stores, and **each one fails silently** if a restore leaves it
+out. The site loads, old conversations open, and you would only notice by searching or by
+asking about an old document. So the script handles all three, then checks them before it
+says the restore is good:
 
-    **1. Conversation search.** A restored dump carries `_meiliIndex: true` on every
-    document, so LibreChat believes the index is already built and skips the sync. Your
-    index is empty. Nothing logs an error. Verify against Meilisearch itself:
+| Store | What the script does | What it checks afterwards |
+|---|---|---|
+| MongoDB | `mongorestore --drop` | The application answers its health check |
+| pgvector (document chat) | Replaces the embeddings with the paired vector dump, in one transaction: all of it or none of it | The table holds exactly as many embeddings as the dump, and their dimensions match what this host had before. A mismatch means the embedding model differs, and document chat would return nonsense |
+| Meilisearch (conversation search) | Clears the `_meiliIndex` flags and empties the search indexes, so LibreChat rebuilds them when it starts | Waits up to 15 minutes for search to hold at least 98% of the conversations in MongoDB |
 
-    ```bash
-    docker compose exec -T meilisearch \
-      curl -s -H "Authorization: Bearer $MEILI_MASTER_KEY" http://127.0.0.1:7700/stats
-    ```
+If any check fails, the script exits with an error and says which. **Don't treat the
+instance as good** until you know why.
 
-    If the counts are far below MongoDB's, clear the flags and restart `api` — procedure
-    in [Migrating an existing install](migrating-an-existing-install.md#6-reset-the-search-index-then-let-it-rebuild).
+Why search needs the reset: a restored dump carries `_meiliIndex: true` on every
+document, because those documents really were indexed, in the *source* machine's
+Meilisearch. Without the reset, LibreChat believes the index is complete and never
+rebuilds it. The reset script is `scripts/reset-meili-flags.js`; the background is in
+[Migrating an existing install](migrating-an-existing-install.md#6-reset-the-search-index-then-let-it-rebuild).
 
-    **2. Document chat.** The embeddings live in pgvector, not MongoDB, so this dump
-    never contained them. If you restored the database onto a machine whose vector
-    database does not match, document chat answers **without consulting your documents**
-    — confidently, and without an error. The vector data is on the data disk, so an
-    Azure Backup restore covers it; a database-only restore does not.
+Afterwards, by hand: sign in, open an old conversation, **search for a phrase you know
+exists**, and ask a document-chat question about a file indexed before the restore.
+
+!!! warning "Backups from before vector dumps existed"
+    Those have no `vectordb-` file. The script refuses them until you add
+    `--skip-vectordb`, which restores MongoDB and leaves this host's vector database alone.
+    Document chat then answers **without consulting** any document whose embeddings aren't
+    already on this host, and it does so with no error.
+
+!!! note "Restoring from a local file"
+    `scripts/restore.sh /path/librechat.archive.gz --vectordb /path/vectordb.sql.gz`.
+    The vector file is the same data-only SQL format the migration guide produces, so either
+    one works here.
 
 !!! note "The dump does not include uploaded files"
     Restoring the database alone leaves attachments that appear in conversations and
