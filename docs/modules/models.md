@@ -49,11 +49,30 @@ Two things to check first:
 
 2. **Give notice** if it is in active use.
 3. **Migrate the agents** — below.
-4. **Then** remove it from the model list.
+4. **Move the conversations forward** — [below](#moving-conversations-forward).
+5. **Then** remove it from the model list.
 
-Conversations and messages keep the model string they were created with. Do not
-migrate those. They record which model actually produced each response; rewriting them
-would be falsifying a record, not fixing a configuration.
+!!! danger "Removing a model from the list does not stop old conversations using it"
+    A conversation stores the endpoint and model its **next** turn will use. Remove
+    the model from the list and one of two things happens to every thread still
+    pointing at it:
+
+    - **The server enforces that endpoint's list:** the thread fails with an error
+      the next time somebody continues it.
+    - **It doesn't:** the thread keeps quietly running the retired model.
+
+    Maryland Legal Aid had both. Threads on retired Claude models failed. Threads on
+    the deleted built-in `openAI` endpoint kept running GPT-5.4 and GPT-5.5 for ten
+    weeks: 883 replies to 38 people. That endpoint's allowlist had become OpenAI's
+    entire catalog, because `OPENAI_MODELS` was unset while `OPENAI_API_KEY` was
+    still set.
+
+    Check what the server actually accepts with `GET /api/models` as an ordinary
+    user, not by looking at the menu.
+
+**Messages are a different matter.** Each one records which model actually wrote it.
+Never migrate those; rewriting them would be falsifying a record, not fixing a
+configuration. Moving a conversation changes only the model its next turn uses.
 
 ## Migrating agents off a dropped model
 
@@ -155,6 +174,49 @@ db.agents.aggregate([
 ```
 
 Both must return empty.
+
+## Moving conversations forward
+
+`scripts/conversation-map.json` says, per endpoint, which models stay and where the
+others go. Each target lists every field a moved conversation should end up with,
+so it looks like a conversation the UI would have created on that model:
+
+```json
+"targets": {
+  "gpt-5.6-luna": {
+    "endpoint": "OpenAI GPT-5.6 Responses", "endpointType": "custom",
+    "model": "gpt-5.6-luna", "spec": "gpt-5.6-luna",
+    "useResponsesApi": true, "maxContextTokens": 380000
+  }
+},
+"sources": {
+  "openAI": { "keep": [], "map": { "gpt-4.1": "gpt-5.6-luna" } }
+}
+```
+
+Copy the target fields from a healthy conversation already on that model; don't
+guess them. `maxContextTokens` especially: old conversations carry their old model's
+limit, and Maryland Legal Aid's `gpt-4.1` threads carried 942,818 tokens, far more
+than their successor accepts. `null` removes a field.
+
+```bash
+scripts/migrate-conversations.sh            # dry run: totals per route, and recent use
+scripts/migrate-conversations.sh --apply    # asks for confirmation, writes, verifies
+```
+
+How the script behaves:
+
+- **It never touches messages or `updatedAt`**, so nobody's sidebar reorders.
+- **It prints no conversation titles.** They are user content and can name clients.
+- **An unmapped model stops everything**, as with agents.
+- **Each update applies only while the conversation is still where the dry run found
+  it.** A user who changed model in between made the newer decision.
+- **Endpoints not listed are never touched.** `agents` conversations follow their
+  agent.
+
+Every `--apply` keeps an audit trail on the data disk holding each changed field's old
+value. `--revert <file> --apply` puts back every conversation still exactly where that
+run left it.
 
 ## Specialist models
 
