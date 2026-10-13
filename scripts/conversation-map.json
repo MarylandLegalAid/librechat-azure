@@ -1,0 +1,78 @@
+{
+  "_comment": [
+    "Where conversations on retired models go next, for scripts/migrate-conversations.sh.",
+    "",
+    "A conversation stores the endpoint and model its NEXT turn uses. This table",
+    "moves that forward when a model is retired; it never touches messages, which",
+    "record what actually answered. See scripts/lib/conversation-migration.js.",
+    "",
+    "targets: the complete set of conversation fields a moved conversation ends up",
+    "with. null removes a field. Each target must look like a conversation the UI",
+    "would have created itself: for the custom endpoint that means endpointType,",
+    "the matching modelSpecs `spec`, useResponsesApi, and the context limit that",
+    "conversations on that model already carry. .github/workflows/validate.yml",
+    "checks that every endpoint, spec and model here exists in the configuration.",
+    "",
+    "sources: per endpoint, the models that stay (keep) and where the others go",
+    "(map). A model on a listed endpoint that is in neither stops the run.",
+    "Endpoints not listed are never touched; `agents` conversations follow their",
+    "agent, which scripts/migrate-agent-models.sh handles.",
+    "",
+    "Mapping rule, as for agents: same-tier successor. Cheaper old OpenAI models",
+    "go to Luna (John, 2026-10-13, UPGRADE_PLAN M15).",
+    "",
+    "2026-10-13, interim pass (UPGRADE_PLAN Phase 0 step 7): the built-in openAI",
+    "endpoint is no longer offered but still served 66 active old conversations.",
+    "They move to the GPT-5.6 custom endpoint, so the OPENAI_MODELS allowlist can",
+    "then shrink. Conversations on retired Claude models already fail to continue",
+    "(the anthropic list is enforced), so they move to their successors in the",
+    "same pass. Phase 3 replaces this table with the GPT-6 one."
+  ],
+
+  "targets": {
+    "gpt-5.6-sol": {
+      "endpoint": "OpenAI GPT-5.6 Responses",
+      "endpointType": "custom",
+      "model": "gpt-5.6-sol",
+      "spec": "gpt-5.6-sol",
+      "useResponsesApi": true,
+      "maxContextTokens": 380000
+    },
+    "gpt-5.6-luna": {
+      "endpoint": "OpenAI GPT-5.6 Responses",
+      "endpointType": "custom",
+      "model": "gpt-5.6-luna",
+      "spec": "gpt-5.6-luna",
+      "useResponsesApi": true,
+      "maxContextTokens": 380000
+    },
+    "claude-opus-4-8": { "endpoint": "anthropic", "model": "claude-opus-4-8" },
+    "claude-sonnet-5": { "endpoint": "anthropic", "model": "claude-sonnet-5" }
+  },
+
+  "sources": {
+    "openAI": {
+      "keep": [],
+      "map": {
+        "gpt-5.5": "gpt-5.6-sol",
+        "gpt-5.4": "gpt-5.6-sol",
+        "gpt-5.2": "gpt-5.6-luna",
+        "gpt-4.1": "gpt-5.6-luna",
+        "gpt-5.1": "gpt-5.6-luna",
+        "gpt-5-mini": "gpt-5.6-luna",
+        "gpt-5.4-mini": "gpt-5.6-luna",
+        "gpt-5-nano": "gpt-5.6-luna"
+      }
+    },
+    "anthropic": {
+      "keep": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"],
+      "map": {
+        "claude-opus-5": "claude-opus-4-8",
+        "claude-opus-4-7": "claude-opus-4-8",
+        "claude-opus-4-5": "claude-opus-4-8",
+        "claude-sonnet-4-6": "claude-sonnet-5",
+        "claude-sonnet-4-5": "claude-sonnet-5"
+      }
+    }
+  }
+}

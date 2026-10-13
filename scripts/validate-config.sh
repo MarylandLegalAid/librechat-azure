@@ -236,6 +236,26 @@ while IFS= read -r provider; do
   fi
 done < <(jq -r 'to_entries[] | select(.key | startswith("_") | not) | .value.provider' scripts/model-map.json | sort -u)
 
+# conversation-map.json: a target that names an endpoint, spec or model the
+# configuration does not have would move conversations somewhere they cannot
+# be continued. The migration's own checks cannot see librechat.yaml, so this
+# is the only place that catches it.
+mapfile -t SPEC_NAMES < <(yq -r '.modelSpecs.list[]?.name' librechat.yaml)
+approved_models="$(node -e "console.log(require('./scripts/lib/agent-model-migration.js').APPROVED_MODELS.join('\n'))")"
+while IFS=$'\t' read -r target endpoint model spec; do
+  [ -n "$target" ] || continue
+  if ! known_endpoint "$endpoint"; then
+    fail "conversation-map.json target '$target': endpoint '$endpoint' matches no built-in or custom endpoint"
+  elif ! grep -qxF "$model" <<< "$approved_models"; then
+    fail "conversation-map.json target '$target': model '$model' is not an approved, configured model"
+  elif [ -n "$spec" ] && ! printf '%s\n' "${SPEC_NAMES[@]}" | grep -qxF "$spec"; then
+    fail "conversation-map.json target '$target': spec '$spec' is not a modelSpecs entry"
+  else
+    pass "conversation-map.json target '$target' resolves"
+  fi
+done < <(jq -r '.targets | to_entries[] | select(.key | startswith("_") | not)
+                | [.key, .value.endpoint, .value.model, (.value.spec // "")] | @tsv' scripts/conversation-map.json)
+
 while IFS= read -r endpoint; do
   [ -n "$endpoint" ] || continue
   if known_endpoint "$endpoint"; then
