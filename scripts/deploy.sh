@@ -42,7 +42,6 @@ cd "$REPO_ROOT"
 
 LOCK_FILE="/var/lock/librechat-deploy.lock"
 CONFIG_FILE="/etc/librechat-deploy.conf"
-BRANCH="${DEPLOY_BRANCH:-main}"
 # /health, not /healthz — the latter returns 200 with the frontend's HTML from
 # the catch-all route, so it passes even when the API is down. /api/health does
 # not exist at all. Verified by probing v0.8.7 directly.
@@ -75,6 +74,9 @@ fail() { echo "[deploy] ERROR: $*" >&2; }
 export KV_NAME="${KV_NAME:-}"
 export DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 export REPO_URL="${REPO_URL:-}"
+# Only now, after the config file: setting this any earlier ignored a
+# DEPLOY_BRANCH written there, and every machine silently deployed main.
+BRANCH="$DEPLOY_BRANCH"
 
 
 # -----------------------------------------------------------------------------
