@@ -403,8 +403,20 @@ fileConfig:
 # an agent, a broken memory provider does not produce an obvious failure — memory
 # extraction simply stops happening, and personalization quietly degrades with no
 # error surfaced to anyone. Verify it after any change to the endpoint name.
+#
+# ⚠️  `enabled: true` is REQUIRED, and its absence fails just as silently. From
+# v0.8.7, automatic memory extraction is opt-in: without it LibreChat logs one
+# warning at startup and never extracts again. That is exactly what happened
+# here: memory stopped at the August 2026 cutover and nobody noticed for ten
+# weeks. Check `memoryentries` for recent `updated_at` values after any upgrade.
+#
+# GPT-6 Luna rather than GPT-5.6 Luna: cheaper ($0.10/$0.50 vs $0.20/$1.20) and
+# the successor the rest of the deployment is moving to. It goes through the
+# custom endpoint for now because that endpoint forces the Responses API, which
+# the memory agent's tool calls need on v0.8.7.
 memory:
   tokenLimit: 3000
   agent:
+    enabled: true
     provider: "OpenAI GPT-5.6 Responses"
-    model: "gpt-5.6-luna"
+    model: "gpt-6-luna"
