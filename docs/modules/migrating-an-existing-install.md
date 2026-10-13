@@ -107,10 +107,15 @@ data.
 ### 3. Restore
 
 ```bash
-scripts/restore.sh /path/to/librechat.archive.gz
+scripts/restore.sh /path/to/librechat.archive.gz --skip-vectordb
 ```
 
 `--drop` makes this re-runnable: a second rehearsal cleanly discards the first.
+
+`--skip-vectordb` is because the vector database comes over separately, in step 5. If
+you take that dump now, pass it as `--vectordb /path/to/pgvector.sql.gz` instead and the
+script restores both at once. Either way the script also does step 6's search reset for
+you; step 6 explains why it is needed and how to check it.
 
 ### 4. Copy the uploaded files
 

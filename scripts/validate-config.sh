@@ -557,6 +557,22 @@ else
   fail "host-maintenance scripts do not parse"
 fi
 
+if bash -n scripts/backup-mongo.sh scripts/restore.sh; then
+  pass "backup and restore scripts parse"
+else
+  fail "backup and restore scripts do not parse"
+fi
+
+# A restore that skips either of these "succeeds" with search or document chat
+# silently broken. Both were missing until 2026-10; keep them from regressing.
+if grep -Fq 'reset-meili-flags.js' scripts/restore.sh \
+   && grep -Fq 'langchain_pg_embedding' scripts/restore.sh \
+   && grep -Fq 'langchain_pg_embedding' scripts/backup-mongo.sh; then
+  pass "backups include the vector database, and restores rebuild search"
+else
+  fail "restore.sh or backup-mongo.sh lost the vector database or search-index steps"
+fi
+
 if grep -Fq 'ExecStart=/srv/librechat/app/scripts/host-maintenance.sh --apply' \
      infra/systemd/librechat-host-maintenance.service \
    && grep -Fq 'OnCalendar=Sun *-*-* 04:17:00 UTC' \

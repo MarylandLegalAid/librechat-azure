@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Nightly database dump to Azure Blob Storage.
+# Nightly database dumps to Azure Blob Storage: MongoDB and the vector database.
 #
 # This is the second of two backups, and they protect against different things:
 #
@@ -11,6 +11,13 @@
 #   This script produces a small, portable, single-file dump of the DATABASE. It
 #   restores onto any host with MongoDB, including a laptop, without Azure being
 #   involved at all.
+#
+#   Alongside it, a dump of the document-chat embeddings from pgvector, taken
+#   in the same run and named with the same timestamp so restore.sh can pair
+#   them. MongoDB holds the file records; pgvector holds what those files say.
+#   Restoring one without the other gives document chat that answers WITHOUT
+#   consulting the documents, with no error anywhere. (The file is still named
+#   backup-mongo.sh because the systemd unit and cloud-init call it by name.)
 #
 # The dump matters for a second reason: scripts/restore.sh consumes exactly this
 # artifact, and a migration or a staging refresh uses that same path. So this
@@ -56,15 +63,23 @@ fi
 
 STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 ARCHIVE_NAME="librechat-${STAMP}.archive.gz"
+# Same timestamp as the Mongo archive: that shared stamp is how restore.sh finds
+# the vector dump that belongs to a given database dump.
+VECTOR_NAME="vectordb-${STAMP}.sql.gz"
 # Staged on the data disk rather than /tmp: a full dump can be larger than the
 # OS disk's free space, and the data disk is sized for it.
 STAGING_DIR="${DATA_DIR}/backups"
 ARCHIVE_PATH="${STAGING_DIR}/${ARCHIVE_NAME}"
+VECTOR_PATH="${STAGING_DIR}/${VECTOR_NAME}"
+POSTGRES_DB="$(env_value POSTGRES_DB)"
+POSTGRES_DB="${POSTGRES_DB:-librechat}"
+POSTGRES_USER="$(env_value POSTGRES_USER)"
+POSTGRES_USER="${POSTGRES_USER:-librechat}"
 
 mkdir -p "$STAGING_DIR"
-# The dump is a complete copy of confidential data. Remove it from local disk
-# whatever happens, including on failure — the durable copy is the one in Blob.
-trap 'rm -f "$ARCHIVE_PATH"' EXIT
+# The dumps are complete copies of confidential data. Remove them from local
+# disk whatever happens, including on failure — the durable copies are in Blob.
+trap 'rm -f "$ARCHIVE_PATH" "$VECTOR_PATH"' EXIT
 
 
 # -----------------------------------------------------------------------------
@@ -90,6 +105,29 @@ fi
 
 log "dump is $(numfmt --to=iec "$ARCHIVE_BYTES")"
 
+# Data only, and only the two tables the RAG API owns. The schema belongs to the
+# RAG API, which creates it on startup; restoring data into whatever schema the
+# target's RAG API created is what keeps this portable across hosts whose
+# database and role names differ. Plain SQL rather than pg_dump's custom format
+# so the same file also works with the manual steps in
+# docs/modules/migrating-an-existing-install.md.
+#
+# A failure here does not stop the Mongo upload: a database dump without
+# vectors is still worth keeping. The script exits non-zero at the end, so the
+# timer shows the failure.
+VECTOR_OK=true
+log "dumping the vector database"
+if docker compose -f compose.yaml exec -T vectordb \
+     pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only \
+       --table=langchain_pg_collection --table=langchain_pg_embedding \
+   | gzip -c > "$VECTOR_PATH"; then
+  log "vector dump is $(numfmt --to=iec "$(stat -c %s "$VECTOR_PATH")")"
+else
+  fail "the vector database dump failed; uploading the MongoDB dump anyway."
+  rm -f "$VECTOR_PATH"
+  VECTOR_OK=false
+fi
+
 
 # -----------------------------------------------------------------------------
 # 2. Upload.
@@ -108,6 +146,18 @@ az storage blob upload \
   --overwrite false \
   --output none
 
+if [ "$VECTOR_OK" = true ]; then
+  log "uploading $VECTOR_NAME"
+  az storage blob upload \
+    --account-name "$STORAGE_ACCOUNT" \
+    --container-name "$CONTAINER" \
+    --name "$VECTOR_NAME" \
+    --file "$VECTOR_PATH" \
+    --auth-mode login \
+    --overwrite false \
+    --output none
+fi
+
 log "uploaded"
 
 
@@ -120,13 +170,15 @@ CUTOFF="$(date -u -d "${RETENTION_DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)"
 log "removing backups older than $CUTOFF (${RETENTION_DAYS} days)"
 
 old_blobs="$(
-  az storage blob list \
-    --account-name "$STORAGE_ACCOUNT" \
-    --container-name "$CONTAINER" \
-    --prefix "librechat-" \
-    --auth-mode login \
-    --query "[?properties.creationTime < '${CUTOFF}'].name" \
-    --output tsv
+  for prefix in librechat- vectordb-; do
+    az storage blob list \
+      --account-name "$STORAGE_ACCOUNT" \
+      --container-name "$CONTAINER" \
+      --prefix "$prefix" \
+      --auth-mode login \
+      --query "[?properties.creationTime < '${CUTOFF}'].name" \
+      --output tsv
+  done
 )"
 
 pruned=0
@@ -142,6 +194,11 @@ while IFS= read -r blob; do
 done <<< "$old_blobs"
 
 log "pruned $pruned old backup(s)"
+
+if [ "$VECTOR_OK" = false ]; then
+  fail "finished WITHOUT a vector database dump — see the error above."
+  exit 1
+fi
 log "done"
 
 # -----------------------------------------------------------------------------

@@ -4,7 +4,7 @@ Renovate opens a pull request when a new LibreChat release ships. The pull reque
 changes one line in `compose.yaml`:
 
 ```yaml
-image: ghcr.io/danny-avila/librechat:v0.8.7
+image: ghcr.io/librechat-ai/librechat:v0.8.7
 ```
 
 Merging it deploys the new version within five minutes. Before you merge, work
@@ -41,7 +41,7 @@ This is the step that catches what changelogs miss:
 
 ```bash
 curl -fsSL -o /tmp/new-example.yaml \
-  "https://raw.githubusercontent.com/danny-avila/LibreChat/v0.8.8/librechat.example.yaml"
+  "https://raw.githubusercontent.com/LibreChat-AI/LibreChat/v0.8.8/librechat.example.yaml"
 
 diff <(yq -P 'sort_keys(..)' /tmp/new-example.yaml) \
      <(yq -P 'sort_keys(..)' librechat.yaml) | head -60
@@ -68,7 +68,7 @@ Each LibreChat release pins versions of MongoDB, Meilisearch, pgvector and the R
 in its own `docker-compose.yml`. Compare against `compose.yaml` here:
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/danny-avila/LibreChat/v0.8.8/docker-compose.yml" \
+curl -fsSL "https://raw.githubusercontent.com/LibreChat-AI/LibreChat/v0.8.8/docker-compose.yml" \
   | grep 'image:'
 ```
 
