@@ -105,8 +105,12 @@ log "current commit: ${PREVIOUS_SHA:0:12}"
 # the branch, never a place where edits are made. Anything modified here by hand
 # is discarded on the next deploy, deliberately — the repository is the only
 # source of truth for configuration, and there is nowhere else to look.
+#
+# The refspec is spelled out because cloud-init clones a single branch: a bare
+# `git fetch origin <branch>` then updates only FETCH_HEAD, never
+# origin/<branch>, and the reset below fails for any branch but main.
 log "fetching origin/$BRANCH"
-git fetch --quiet origin "$BRANCH"
+git fetch --quiet origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
 git reset --quiet --hard "origin/$BRANCH"
 
 CURRENT_SHA="$(git rev-parse HEAD)"
