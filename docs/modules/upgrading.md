@@ -105,6 +105,51 @@ What it cannot catch is an upgrade that starts healthy and misbehaves — a rena
 config key that now means something else, or a feature that quietly stopped working.
 That is what the smoke test is for.
 
+## Releases with an offline database migration
+
+Some releases need a one-time migration to run **with nothing writing to the
+database**, before the new version starts. v0.8.8's tenant-index migration is one:
+the old unique indexes conflict with the new ones, and the new version logs
+`Index build failed` until the migration has run.
+
+The ordinary path cannot do that. `deploy.sh` pulls the new image and starts it in
+one step, and if the start fails, it rolls back automatically. After a migration,
+an automatic rollback is the wrong thing: it would put the old version on a
+migrated database. So drive this kind of upgrade by hand:
+
+```bash
+# 1. A restore point: a fresh dump (and an Azure snapshot of the data disk).
+sudo systemctl start librechat-backup.service
+
+# 2. Stop the timer, so it cannot deploy the merge before you are ready.
+sudo systemctl stop librechat-deploy.timer
+
+# 3. Merge the upgrade, then on the machine:
+cd /srv/librechat/app
+sudo git fetch origin main && sudo git reset --hard origin/main
+C="docker compose -f compose.yaml -f compose.storage.disk.yml"   # your storage mode
+sudo $C pull api
+
+# 4. Stop every writer. Only the API writes to MongoDB; the admin panel goes
+#    through it. MongoDB itself stays up.
+sudo $C stop api admin-panel
+
+# 5. Run the migration from the NEW image, as a one-off container.
+sudo $C run --rm --no-deps -w /app api npm run migrate:tenant-indexes:dry-run
+sudo $C run --rm --no-deps -w /app api npm run migrate:tenant-indexes
+
+# 6. Only if step 5 exited 0: start the new version, and restart the timer.
+sudo scripts/deploy.sh --force
+sudo systemctl start librechat-deploy.timer
+```
+
+Because step 3 already moved the checkout, step 6 sees no change of commit and so
+has nothing to roll back to. That is intended. From step 5 on, the way back is a
+**restore**, not a revert. If step 5 fails, nothing has been dropped yet: keep the
+writers stopped, fix what it reports, and run it again.
+
+Rehearse the whole sequence on a [staging copy](#a-note-on-staging) first.
+
 ## After merging
 
 ```bash

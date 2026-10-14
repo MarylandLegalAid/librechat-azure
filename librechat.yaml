@@ -31,7 +31,7 @@
 # changelog. When you upgrade LibreChat, diff the new release's own
 # librechat.example.yaml against this file; renamed and removed keys are the most
 # common upgrade break and prose changelogs miss them.
-version: 1.3.13
+version: 1.3.17
 
 # Caches the parsed config for faster loading across the app lifecycle.
 cache: true
@@ -211,7 +211,9 @@ registration:
 endpoints:
   agents:
     # Pin the complete v0.8.7 default list explicitly so a future LibreChat
-    # default change cannot silently remove Execute Code.
+    # default change cannot silently remove Execute Code. v0.8.8's default adds
+    # `memory` and `ask_user_question`; they are left out here on purpose so the
+    # platform upgrade changes nothing users see. UPGRADE_PLAN Phase 3 (F4).
     capabilities:
       - "deferred_tools"
       - "execute_code"
@@ -225,6 +227,18 @@ endpoints:
       - "tools"
       - "chain"
       - "ocr"
+    # v0.8.8 lets users enroll their own machines as code workers, up to five
+    # each by default, through the interpreter's bring-your-own-machine bridge.
+    # This deployment's interpreter keeps that bridge off (codeinterpreter/
+    # compose.yaml, and Caddy refuses its URL), so enrollment could only fail.
+    # Off here too, so the option is not offered at all.
+    #
+    # The schema requires allowedEnvironments whenever this block exists. The
+    # list below is all three, which is the default when the block is omitted.
+    statefulCodeSessions:
+      allowedEnvironments: ["user", "agent-user", "conversation"]
+      principalWorkers:
+        enabled: false
 
   # THE BUILT-IN openAI ENDPOINT IS DELIBERATELY ABSENT. Do not add it back.
   #
@@ -356,16 +370,24 @@ modelSpecs:
 speech:
   speechTab:
     speechToText:
-      engineSTT: "openai"          # enum: 'openai' | 'azureOpenAI' (matches speech.stt.openai below)
+      # 'openai' still validates in v0.8.8 and is normalized to 'external' (an
+      # outside STT service, configured under speech.stt below).
+      engineSTT: "openai"
       autoTranscribeAudio: true
   stt:
     openai:
       apiKey: '${STT_API_KEY}'
       model: 'whisper-1'
 fileConfig:
-  stt:
-    supportedMimeTypes:
-      - "^audio/(mp3|mpeg|mpeg3|wav|wave|x-wav|ogg|vorbis|mp4|x-m4a|flac|x-flac|webm)$"
+  # Hold the pre-v0.8.8 attachment behavior: files go through tools (file search,
+  # text extraction) rather than straight to the model. v0.8.8's new default
+  # sends images, audio, video and PDFs natively to the provider, which changes
+  # cost, behavior, and what leaves through which channel. Upgrade-parity only:
+  # UPGRADE_PLAN Phase 3 (F1) decides the new routing deliberately.
+  legacyFileUploadUX: true
+  # There is deliberately no `stt:` block here. One existed and did nothing:
+  # LibreChat's config schema has no fileConfig.stt and strips it silently (in
+  # v0.8.7 and v0.8.8 alike), and the built-in audio list is a superset of it.
 
 # =============================================================================
 # MCP tool servers — deliberately NOT configured here
