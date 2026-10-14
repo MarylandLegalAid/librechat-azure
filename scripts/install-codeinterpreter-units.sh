@@ -38,5 +38,13 @@ for path in "$UNIT_SOURCE"/*.timer; do
 done
 systemctl enable codeinterpreter-boot.service >/dev/null 2>&1
 
+# cloud-init enables the deploy timer but cannot start it before the first
+# deploy. Start it here, once that deploy has run, unless it was disabled on
+# purpose (enableDeployTimer=false).
+if systemctl is-enabled --quiet codeinterpreter-deploy.timer 2>/dev/null \
+   && ! systemctl is-active --quiet codeinterpreter-deploy.timer; then
+  systemctl start codeinterpreter-deploy.timer
+fi
+
 [ "${#changed[@]}" -gt 0 ] && echo "[units] updated: ${changed[*]}"
 exit 0

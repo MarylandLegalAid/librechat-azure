@@ -5,8 +5,14 @@
 # Nothing here is started by hand. scripts/codeinterpreter-deploy.sh is the only
 # thing that runs `docker compose up`.
 #
-# Derived from upstream's docker-compose.yaml at v1.10.4
-# (LibreChat-AI/code-interpreter, commit a62d69e). It is a separate file rather
+# Images and settings are upstream's v1.10.3 (LibreChat-AI/code-interpreter,
+# commit 68c9f93), deliberately not v1.10.4: v1.10.4's sandbox cannot find its
+# own native pipe module inside the micro-VM and fails EVERY execution while
+# reporting healthy (upstream #320, #329). Move on only to a release that
+# closes those, and run a real execution before trusting it.
+#
+# Derived from upstream's docker-compose.yaml, which is identical at both tags.
+# It is a separate file rather
 # than an overlay on upstream's for one reason: upstream's file is written for a
 # laptop. It hard-codes development passwords (`REDIS_PASSWORD=localdev`,
 # `minioadmin`), a default execution-manifest signing key, and turns the
@@ -96,7 +102,7 @@ services:
       - api
 
   api:
-    image: ghcr.io/librechat-ai/code-interpreter-api@sha256:34f614538fab95eb919afba0c8140d88d6430da91399499a9c799f111e81f84a
+    image: ghcr.io/librechat-ai/code-interpreter-api@sha256:3294dbf7da1a59b83bffde07adb7dfb2fdb5639090d9b757a4cad582210b11c8
     container_name: api
     restart: unless-stopped
     logging: *default-logging
@@ -123,7 +129,7 @@ services:
       - tool_call_server
 
   service-worker:
-    image: ghcr.io/librechat-ai/code-interpreter-worker@sha256:9133d406a65c88a655db161f2e99f5f8630ec7986f610b31994a80be8fd9d8f4
+    image: ghcr.io/librechat-ai/code-interpreter-worker@sha256:cf1b8f9a2f798a7f98e901e8d42cfa07f466c09460dd7f1c99ce3a415e09e562
     container_name: service-worker
     restart: unless-stopped
     logging: *default-logging
@@ -142,7 +148,7 @@ services:
         condition: service_healthy
 
   egress_gateway:
-    image: ghcr.io/librechat-ai/code-interpreter-egress-gateway@sha256:aeba02f1d9892e1fd4661c51db5f7abf81a8831552b1507da5ae219701ae7988
+    image: ghcr.io/librechat-ai/code-interpreter-egress-gateway@sha256:973bf94409cbeba04cf6d3a9c5f1269046047a8b4b2d3835b990fbd198921de0
     container_name: egress_gateway
     restart: unless-stopped
     logging: *default-logging
@@ -163,7 +169,7 @@ services:
       - redis
 
   tool_call_server:
-    image: ghcr.io/librechat-ai/code-interpreter-tool-call-server@sha256:9da5ef854b48e87caf68b0d7f102ac5fe41589981f073ff2c5ca341f5451ed09
+    image: ghcr.io/librechat-ai/code-interpreter-tool-call-server@sha256:24353ed75d35c60087f66f56fa196411367b9556bf607b9c9a6357152b3d9a74
     container_name: tool_call_server
     restart: unless-stopped
     logging: *default-logging
@@ -182,7 +188,7 @@ services:
   # The published image is upstream's `sandbox-runner-true` target, which has
   # the language packages baked in, so nothing is mounted from the host.
   sandbox-runner:
-    image: ghcr.io/librechat-ai/code-interpreter-sandbox-runner@sha256:13a76d9d7b01b900f777f1997f2662d79069e5834431c52c140e7ccd2daeeb62
+    image: ghcr.io/librechat-ai/code-interpreter-sandbox-runner@sha256:70af2e870c54306033fa84773b6782e2b3fa9f6fc1129e62121c409d5105c7df
     container_name: sandbox-runner
     restart: unless-stopped
     logging: *default-logging
@@ -231,7 +237,7 @@ services:
       start_period: 20s
 
   file_server:
-    image: ghcr.io/librechat-ai/code-interpreter-file-server@sha256:c171da061c81f5f9b5283071d0ac53953acd987e763d94045fb6c1b4770236dd
+    image: ghcr.io/librechat-ai/code-interpreter-file-server@sha256:0d95e2ddde261da539b22ca99e691307f0194cbc0da49db80c4391bc92fefb46
     container_name: file_server
     restart: unless-stopped
     logging: *default-logging
