@@ -234,6 +234,30 @@ After that the timer checks for new commits every five minutes.
 Then set `LIBRECHAT-CODE-BASEURL` on the chat VM (see [Wiring it up](#wiring-it-up)) and
 run [the checks](#checking-it-works).
 
+## Moving a hostname to a rebuilt machine
+
+When a new interpreter machine replaces an old one under the same hostname,
+LibreChat needs no change at all: `LIBRECHAT-CODE-BASEURL` stays the same.
+
+1. **A day ahead,** lower the hostname's DNS TTL to five minutes.
+2. **On the new machine,** build it and run the [checks](#checking-it-works) against
+   its `dnsLabel` hostname first.
+3. Set the new vault's `CODE-DOMAIN` to the real hostname. Leave the old machine
+   running: it is your rollback.
+4. Change the hostname's A record to the new machine's address.
+5. Wait for `scripts/check-dns.sh <hostname> <new address>` to say GO. Do not skip
+   this; see the rate-limit warning in
+   [migrating an existing install](migrating-an-existing-install.md).
+6. `sudo /srv/codeinterpreter/app/scripts/codeinterpreter-deploy.sh --force` on the new
+   machine. Caddy obtains a certificate for the real hostname.
+7. Run the checks again, from the app.
+8. Stop-deallocate the old machine the next day, and keep it for two weeks.
+
+**Rollback** is pointing the A record back while the old machine still runs.
+Nothing a user cares about is lost either way. Session files are disposable, and
+LibreChat keeps its own copy of every uploaded and generated file. When a file it
+expects is missing from the interpreter, it uploads it again.
+
 ## What differs from upstream's compose file
 
 `codeinterpreter/compose.yaml` is a separate file, not an overlay on upstream's

@@ -347,18 +347,15 @@ had the same gap and reported itself perfectly healthy.
     Aid saw a zone sit at roughly 50/50 for ten minutes, with a naive "all nameservers
     agree" check passing once by luck and immediately breaking.
 
-    Sample repeatedly and require a percentage:
+    Sample repeatedly and require a percentage. `scripts/check-dns.sh` asks every
+    authoritative nameserver a dozen times and says GO only at 95%:
 
     ```bash
-    for rep in $(seq 1 12); do
-      for ns in $(dig +short NS yourorg.org); do
-        dig +short chat.yourorg.org @"$ns"
-      done
-    done | sort | uniq -c
+    scripts/check-dns.sh chat.yourorg.org <new address>
+    scripts/check-dns.sh admin.yourorg.org <new address>
     ```
 
-    Go when essentially every answer is the new address — and check the admin hostname
-    too. A brand-new record often lags an edited one.
+    Check the admin hostname too. A brand-new record often lags an edited one.
 
 !!! note "Anything you changed by hand on the machine, change in the template too"
     If you edit a Bicep parameter live — an SSH allowlist entry, for instance — the next
