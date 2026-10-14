@@ -1,5 +1,9 @@
 # Code interpreter
 
+!!! note "Optional"
+    Everything on this page is an add-on. The chat deployment works without it; set
+    `interface.runCode: false` in `librechat.yaml` if you do not build it.
+
 Lets the model write and run code — analyze a spreadsheet, produce a chart, reshape a
 dataset — and return the results and any files it produced.
 
@@ -22,8 +26,8 @@ generated code executing on a third party's infrastructure — the same confiden
 problem your terms of service probably warn about for web search.
 
 Self-hosting the open-source engine behind it
-([ClickHouse/code-interpreter](https://github.com/ClickHouse/code-interpreter)) keeps
-everything inside infrastructure you control.
+([LibreChat-AI/code-interpreter](https://github.com/LibreChat-AI/code-interpreter))
+keeps everything inside infrastructure you control.
 
 If that distinction does not matter for your data, the hosted option is much less
 work.
@@ -33,6 +37,7 @@ work.
 A `Standard_D2s_v5` — about **$70/month** for compute, or roughly **$85/month** with
 its disk and public IP. That size class supports nested virtualization, which is the
 whole reason it is viable. Two concurrent executions is a reasonable starting point.
+The health log workspace adds cents: one short line a minute.
 
 The interpreter adds roughly $85/month to the infrastructure bill. Decide whether you
 want the capability before building it.
@@ -159,10 +164,150 @@ this. It is worth reading as a model even if your wording differs.
 
 ## Building the interpreter machine
 
-Out of scope for this blueprint — it is a separate deployment with its own hardening,
-monitoring and operational story. The
-[upstream project](https://github.com/ClickHouse/code-interpreter) is the starting
-point.
+The machine is defined in this repository and deploys the same way the chat VM does:
+a Bicep template, a first-boot script that prepares the host and stops, secrets in Key
+Vault rendered into `.env` at deploy time, and a five-minute deploy timer.
 
-What is in scope is everything above: how LibreChat reaches it, how authentication
-works, and what to verify.
+| Where | What |
+|---|---|
+| `infra/codeinterpreter/main.bicep` | VM, firewall (443 and admin SSH only), key vault, health monitoring and alerts |
+| `infra/codeinterpreter/cloud-init.yaml` | First boot: Docker, Azure CLI, a checkout of this repository, the deploy timer |
+| `codeinterpreter/compose.yaml` | The stack: upstream's published images pinned by digest, plus Caddy, Redis and Garage |
+| `codeinterpreter/env.defaults` | Every non-secret setting, including the limits your terms of service promise |
+| `scripts/codeinterpreter-seed-secrets.sh` | Generates the machine's secrets into its vault, from your workstation |
+| `scripts/codeinterpreter-deploy.sh` | The only thing that starts the stack; rolls back on a failed health check |
+
+### 1. Create the machine
+
+Put it in its own resource group, so retiring it later is one delete:
+
+```bash
+az group create --name rg-codeinterpreter-prod --location eastus2
+az deployment group create \
+  --resource-group rg-codeinterpreter-prod \
+  --template-file infra/codeinterpreter/main.bicep \
+  --parameters adminSshPublicKey="$(cat ~/.ssh/librechat.pub)" \
+               adminSourceAddressPrefixes='["203.0.113.4/32"]' \
+               actionGroupId="<the chat deployment's action group resource ID>" \
+               dnsLabel=codeinterpreter-<something-unique>
+```
+
+`actionGroupId` sends this machine's alerts to the same people as the chat VM's. Leave
+it out and pass `alertEmail` instead to create a separate group. `dnsLabel` gives the
+machine an Azure hostname (`<label>.<region>.cloudapp.azure.com`) so you can test it
+before your own hostname points at it.
+
+The template outputs the vault name. Give yourself **Key Vault Secrets Officer** on that
+vault for the next step.
+
+### 2. Seed its secrets
+
+```bash
+scripts/codeinterpreter-seed-secrets.sh \
+  --vault <interpreter vault> \
+  --chat-vault <the chat VM's vault> \
+  --domain <the hostname this machine will answer on> \
+  --acme-email <address for certificate notices>
+```
+
+It generates every secret the stack needs and writes them straight to the vault without
+printing them. It also derives the public JWT key from the chat VM's
+`CODEAPI-JWT-PRIVATE-JWK-JSON`, so the two halves of the key pair cannot disagree. It
+refuses if that private key's own `x` does not match its `d`.
+
+It is safe to re-run: existing secrets are left alone unless you name them with
+`--rotate`.
+
+### 3. Deploy
+
+Point the hostname's DNS A record at the machine first (or use the `dnsLabel` hostname).
+Port 80 is closed on this machine, so the certificate is issued over port 443 alone.
+
+```bash
+az ssh vm -g rg-codeinterpreter-prod -n vm-codeinterpreter-prod
+sudo /srv/codeinterpreter/app/scripts/codeinterpreter-deploy.sh --force
+```
+
+The first deploy pulls the sandbox image, which is large: allow about five minutes.
+After that the timer checks for new commits every five minutes.
+
+Then set `LIBRECHAT-CODE-BASEURL` on the chat VM (see [Wiring it up](#wiring-it-up)) and
+run [the checks](#checking-it-works).
+
+## What differs from upstream's compose file
+
+`codeinterpreter/compose.yaml` is a separate file, not an overlay on upstream's
+`docker-compose.yaml`, because upstream's is written for a laptop:
+
+- it hard-codes development passwords and a default execution-manifest signing key;
+- it turns the bring-your-own-machine bridge **on**;
+- it pulls MinIO, which can no longer be pulled (below).
+
+An overlay has to remember to override every one of those, and the one it forgets is
+silently insecure. In this file nothing is inherited, every secret is required, the
+bridge stays at its disabled default, and Caddy refuses `/v1/bridge` and `/metrics` as
+a second line.
+
+### Garage instead of MinIO
+
+The file server keeps session files in an S3-compatible store. Upstream uses MinIO,
+whose community images stopped being published in late 2025; every registry copy is
+now private, so a clean host cannot start upstream's stack at all
+([#252](https://github.com/LibreChat-AI/code-interpreter/issues/252),
+[#327](https://github.com/LibreChat-AI/code-interpreter/issues/327)).
+
+This module uses [Garage](https://garagehq.deuxfleurs.fr/), which is maintained, AGPL
+like MinIO, publishes official images, and supports everything the file server does.
+An hourly `rclone` job deletes files older than 24 hours. Garage's own lifecycle rules
+run once a day, which would let a file live for up to 48 hours, and your terms of
+service probably say 24.
+
+## Upgrading the interpreter
+
+Upstream publishes images tagged only `sha-<commit>` and a moving `main`. There are no
+version tags and no `latest`, so neither Renovate nor `docker compose pull` will tell
+you about a release.
+
+1. Find the release's commit: `git rev-list -n1 v<version>` in a clone of upstream.
+2. Find that commit's `sha-` images. A commit that changed no image inputs has none;
+   use the nearest earlier commit that does.
+3. Resolve each image to a digest, for example
+   `docker buildx imagetools inspect ghcr.io/librechat-ai/code-interpreter-api:sha-<commit>`,
+   and replace the six digests in `codeinterpreter/compose.yaml`.
+4. Diff upstream's `docker-compose.yaml` between the two tags, and carry over any new
+   variable that matters. Leave out anything that turns on a feature you do not use.
+5. **Run a real execution before trusting it.** Health checks are not enough.
+   v1.10.4 passed every one and failed every execution, because its sandbox could not
+   find a native module inside the micro-VM
+   ([#320](https://github.com/LibreChat-AI/code-interpreter/issues/320),
+   [#329](https://github.com/LibreChat-AI/code-interpreter/issues/329)). This module
+   stays on v1.10.3 until that is fixed.
+
+## Monitoring
+
+Once a minute, `scripts/codeinterpreter-health.sh` writes one line to syslog with
+counts only and no user data:
+
+- workers running;
+- jobs waiting;
+- whether file cleanup succeeded, and when it last ran;
+- files past their retention;
+- missing containers and restarts;
+- disk use.
+
+Azure Monitor ships that line to Log Analytics, and seven alert rules read it.
+
+The **heartbeat** alert fires when the line stops arriving. It is the one to trust,
+because every other alert goes quiet, not loud, when the line is missing. The VM also
+has the usual host-metric alerts (CPU, memory, disk).
+
+## Known limits
+
+- **A file of exactly 50 MiB is rejected.** The limit is "less than", not "at most".
+- **The tenant claim is required but not pinned.** Strict tenant isolation makes every
+  token carry a tenant and keys every session by it. It does not reject a token whose
+  tenant differs from `CODEAPI_JWT_SINGLE_TENANT_ID`. Only the chat VM can sign tokens,
+  and it always stamps its own tenant, so that check would be defence in depth that
+  upstream does not offer.
+- **Nothing here is backed up**, on purpose. Workspaces last an hour and session files a
+  day; a rebuilt machine starting empty is correct.
