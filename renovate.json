@@ -50,6 +50,24 @@
       ]
     },
     {
+      "description": "Code interpreter (optional module): upstream's own images. Disabled on purpose. Upstream publishes them only as `sha-<commit>` tags with no version tags and no `latest`, so codeinterpreter/compose.yaml pins bare digests and Renovate has no version to compare. Bumps are manual; docs/modules/code-interpreter.md has the procedure, including running a REAL execution first (v1.10.4 passed every health check and failed every execution).",
+      "matchPackageNames": ["/^ghcr\\.io/librechat-ai/code-interpreter-/"],
+      "enabled": false
+    },
+    {
+      "description": "Code interpreter (optional module): its supporting services. Their state is disposable (24-hour session files), so a format change costs a volume reset, not data.",
+      "matchPackageNames": ["redis", "dxflrs/garage", "rclone/rclone"],
+      "groupName": "code interpreter services",
+      "automerge": false,
+      "labels": ["dependencies", "code-interpreter"],
+      "prBodyNotes": [
+        "Deploys only to the code interpreter VM, through its own deploy timer.",
+        "Garage: if a release changes the metadata format and Garage refuses to start, remove the `garage_meta` and `garage_data` volumes on the interpreter VM. Session files are disposable.",
+        "rclone: it runs codeinterpreter/file-cleanup/file-cleanup.sh. Check that the `delete`, `lsf`, `--min-age` and `--use-server-modtime` flags are unchanged.",
+        "After it deploys, upload a file through Run Code and confirm it round-trips. Health checks alone do not prove the file path."
+      ]
+    },
+    {
       "description": "The MCP tool servers, each published from its own public repository. Pinned to release tags so that what this deployment runs is always a specific reviewed build.",
       "matchPackageNames": [
         "ghcr.io/marylandlegalaid/legalserver-mcp",
