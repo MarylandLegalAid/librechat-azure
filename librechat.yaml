@@ -420,3 +420,26 @@ memory:
     enabled: true
     provider: "OpenAI GPT-5.6 Responses"
     model: "gpt-6-luna"
+
+# =============================================================================
+# Web search
+# =============================================================================
+# Declared rather than auto-detected. Without this block LibreChat picks each
+# stage from whichever API key happens to be set, so nothing here said that web
+# search used Jina at all, and nobody was looking when it stopped working.
+#
+#   search:  Serper     (SERPER-API-KEY)
+#   scrape:  Firecrawl  (FIRECRAWL-API-KEY)
+#   rerank:  Jina       (JINA-API-KEY)
+#
+# The API keys are left to the schema defaults, which read those variables.
+#
+# ⚠️  A failed rerank is silent to users. LibreChat logs "Error using Jina
+# reranker" and falls back to the first few excerpts in page order. The old
+# key ran out of credit and every rerank failed from at least August to
+# October 2026. If web search answers seem to miss the relevant part of long
+# documents, check the error log for that line first.
+webSearch:
+  searchProvider: "serper"
+  scraperProvider: "firecrawl"
+  rerankerType: "jina"
