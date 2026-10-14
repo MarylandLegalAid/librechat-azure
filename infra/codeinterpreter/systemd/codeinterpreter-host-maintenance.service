@@ -1,0 +1,15 @@
+[Unit]
+Description=Prune old code interpreter host artifacts
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=LIBRECHAT_HOST_MAINTENANCE_LOCK=/var/lock/codeinterpreter-deploy.lock
+ExecStart=/srv/codeinterpreter/app/scripts/host-maintenance.sh --apply
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+StandardOutput=journal
+StandardError=journal

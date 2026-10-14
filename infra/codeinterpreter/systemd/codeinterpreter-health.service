@@ -1,0 +1,8 @@
+[Unit]
+Description=Code interpreter health snapshot for Azure Monitor
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/codeinterpreter/app/scripts/codeinterpreter-health.sh

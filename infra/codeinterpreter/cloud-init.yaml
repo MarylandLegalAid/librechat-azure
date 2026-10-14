@@ -1,0 +1,188 @@
+#cloud-config
+# =============================================================================
+# First-boot setup for the code interpreter VM. OPTIONAL module.
+# =============================================================================
+# The interpreter's counterpart to infra/cloud-init.yaml, and the same story:
+# prepare the host — Docker, the Azure CLI, a checkout of this repository, the
+# deploy timer — and stop. The vault is empty at first boot, so nothing starts
+# until a human seeds it and runs the first deploy:
+#
+#     scripts/codeinterpreter-seed-secrets.sh ...        (from a workstation)
+#     sudo /srv/codeinterpreter/app/scripts/codeinterpreter-deploy.sh --force
+#
+# __PLACEHOLDERS__ are substituted by infra/codeinterpreter/main.bicep.
+#
+# To see what happened here:  sudo cloud-init status --long
+#                             sudo cat /var/log/cloud-init-output.log
+# =============================================================================
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - git
+  - jq
+  - util-linux
+  - psmisc
+  - unattended-upgrades
+
+write_files:
+  - path: /etc/codeinterpreter-deploy.conf
+    permissions: '0644'
+    content: |
+      # Read by scripts/codeinterpreter-deploy.sh, scripts/render-env.sh and the
+      # bootstrap script. Written once by cloud-init; safe to edit.
+      KV_NAME=__KEY_VAULT_NAME__
+      DEPLOY_BRANCH=__REPO_BRANCH__
+      REPO_URL=__REPO_URL__
+
+  # Idempotent; re-run by hand after a partial failure:
+  #     sudo /usr/local/sbin/codeinterpreter-host-setup.sh
+  - path: /usr/local/sbin/codeinterpreter-host-setup.sh
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      log() { echo "[host-setup] $*"; }
+
+      # cloud-init's own package upgrade holds the dpkg lock in parallel; see
+      # infra/cloud-init.yaml.
+      APT="apt-get -o DPkg::Lock::Timeout=900 -qq"
+      export DEBIAN_FRONTEND=noninteractive
+      for _ in $(seq 1 120); do
+        fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+        sleep 5
+      done
+
+      # --- The one hardware requirement -----------------------------------
+      # Every execution is a micro-VM. Without nested virtualization there is
+      # no /dev/kvm and nothing can run, so say so at first boot rather than
+      # at the first Run Code.
+      if [ -c /dev/kvm ]; then
+        log "/dev/kvm present"
+      else
+        echo "[host-setup] WARNING: /dev/kvm is missing — this VM size does not support nested virtualization. The interpreter cannot run here." >&2
+      fi
+
+      if ! command -v docker >/dev/null 2>&1; then
+        log "installing Docker"
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+          > /etc/apt/sources.list.d/docker.list
+        $APT update
+        $APT install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      fi
+      systemctl enable --now docker
+      docker --version
+      docker compose version
+
+      if ! command -v az >/dev/null 2>&1; then
+        log "installing the Azure CLI"
+        curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
+        chmod a+r /etc/apt/keyrings/microsoft.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+          > /etc/apt/sources.list.d/azure-cli.list
+        $APT update
+        $APT install -y azure-cli
+      fi
+      az version --output tsv | head -1
+
+      install -d -m 0755 /var/lib/codeinterpreter/textfile
+
+      log "fetching the repository"
+      /usr/local/sbin/codeinterpreter-bootstrap.sh || \
+        log "bootstrap deferred — re-run it once the repository is reachable"
+
+      log "enabling the deploy timer"
+      systemctl daemon-reload
+      if [ "__DEPLOY_TIMER_ENABLED__" = "true" ]; then
+        systemctl enable codeinterpreter-deploy.timer
+        log "deploy timer enabled; it begins after the first manual deploy"
+      else
+        systemctl disable codeinterpreter-deploy.timer || true
+      fi
+
+      log "done"
+
+  # Clone this repository, or leave an existing checkout to the deploy script.
+  # Public repository only: the interpreter VM holds no deploy key.
+  - path: /usr/local/sbin/codeinterpreter-bootstrap.sh
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      . /etc/codeinterpreter-deploy.conf
+      echo "[bootstrap] repository: $REPO_URL ($DEPLOY_BRANCH)"
+      if [ -d /srv/codeinterpreter/app/.git ]; then
+        echo "[bootstrap] already cloned; leaving it to the deploy script"
+      else
+        mkdir -p /srv/codeinterpreter
+        git clone --branch "$DEPLOY_BRANCH" --depth 1 "$REPO_URL" /srv/codeinterpreter/app
+        echo "[bootstrap] cloned"
+      fi
+      git config --global --add safe.directory /srv/codeinterpreter/app
+      echo "[bootstrap] done — next: seed the vault, then"
+      echo "            /srv/codeinterpreter/app/scripts/codeinterpreter-deploy.sh --force"
+
+  - path: /etc/systemd/system/codeinterpreter-deploy.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Deploy the code interpreter from the repository
+      After=docker.service network-online.target
+      Requires=docker.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      WorkingDirectory=/srv/codeinterpreter/app
+      ExecStart=/srv/codeinterpreter/app/scripts/codeinterpreter-deploy.sh
+      # The sandbox image is large; a first pull takes minutes.
+      TimeoutStartSec=1800
+      StandardOutput=journal
+      StandardError=journal
+
+  - path: /etc/systemd/system/codeinterpreter-deploy.timer
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Check for new code interpreter deployments every five minutes
+
+      [Timer]
+      OnBootSec=5min
+      OnUnitActiveSec=5min
+      RandomizedDelaySec=60s
+      Unit=codeinterpreter-deploy.service
+
+      [Install]
+      WantedBy=timers.target
+
+  # Security patches daily, never an automatic reboot: the weekly window in
+  # infra/codeinterpreter/systemd/codeinterpreter-reboot.timer is the only one.
+  - path: /etc/apt/apt.conf.d/52-codeinterpreter-unattended
+    permissions: '0644'
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "false";
+      Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+runcmd:
+  # One command, for the reasons infra/cloud-init.yaml gives (dash, set -e).
+  - /usr/local/sbin/codeinterpreter-host-setup.sh
+
+final_message: |
+  ==========================================================================
+  Interpreter host ready. The stack is NOT running yet — that is expected.
+
+  Next:
+    1. From a workstation: scripts/codeinterpreter-seed-secrets.sh (see its
+       header for arguments).
+    2. Point the interpreter hostname's DNS at this machine.
+    3. sudo /srv/codeinterpreter/app/scripts/codeinterpreter-deploy.sh --force
+  ==========================================================================

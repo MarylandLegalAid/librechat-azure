@@ -1,0 +1,350 @@
+# =============================================================================
+# The code interpreter stack, on its own VM. OPTIONAL — see
+# docs/modules/code-interpreter.md before deciding you want it.
+# =============================================================================
+# Nothing here is started by hand. scripts/codeinterpreter-deploy.sh is the only
+# thing that runs `docker compose up`.
+#
+# Derived from upstream's docker-compose.yaml at v1.10.4
+# (LibreChat-AI/code-interpreter, commit a62d69e). It is a separate file rather
+# than an overlay on upstream's for one reason: upstream's file is written for a
+# laptop. It hard-codes development passwords (`REDIS_PASSWORD=localdev`,
+# `minioadmin`), a default execution-manifest signing key, and turns the
+# bring-your-own-machine bridge ON. An overlay has to remember to override every
+# one of those, and the one it forgets is silently insecure. Here, nothing is
+# inherited: every variable a service sees is listed below.
+#
+# The cost is that an upgrade means reading upstream's compose diff and carrying
+# new variables over by hand. The bump procedure is in
+# docs/modules/code-interpreter.md.
+#
+# Rules this file follows everywhere:
+#
+#  1. Images are pinned by digest. Upstream publishes only `sha-<commit>` tags
+#     and a moving `main`; a digest is the only thing that cannot move.
+#  2. Only Caddy publishes a port to the internet (443). The api and worker
+#     publish metrics on 127.0.0.1 for scripts/codeinterpreter-health.sh;
+#     nothing else is published at all.
+#  3. Every secret is required (`:?`). A missing secret stops the deploy rather
+#     than falling back to anything.
+#
+# There is no persistent data here worth backing up. Session files live 24
+# hours (see file-cleanup below) and workspaces one hour; the volumes are on the
+# OS disk and a rebuilt VM starts empty, which is correct.
+# =============================================================================
+
+name: codeinterpreter
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Shared by every service that talks to Redis or to another internal service.
+x-internal: &internal
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+  CODEAPI_INTERNAL_SERVICE_TOKEN: ${CODEAPI_INTERNAL_SERVICE_TOKEN:?CODEAPI_INTERNAL_SERVICE_TOKEN must be set}
+
+# Shared by the api and the worker, which must agree on tenancy and limits.
+x-execution: &execution
+  LOCAL_MODE: "false"
+  CODEAPI_HARDENED_SANDBOX_MODE: "true"
+  CODEAPI_AUTH_PROVIDER: librechat-jwt
+  # One organization per interpreter. Strict mode rejects a token whose tenant
+  # claim differs, instead of only using this value when the claim is absent.
+  CODEAPI_JWT_SINGLE_TENANT_ID: ${CODEAPI_JWT_SINGLE_TENANT_ID:?CODEAPI_JWT_SINGLE_TENANT_ID must be set}
+  CODEAPI_TENANT_ISOLATION_STRICT: "true"
+  EXECUTION_MANIFEST_MAX_UPLOAD_BYTES: ${EXECUTION_MANIFEST_MAX_UPLOAD_BYTES}
+  EXECUTION_MANIFEST_MAX_OUTPUT_FILES: ${EXECUTION_MANIFEST_MAX_OUTPUT_FILES}
+  JOB_TIMEOUT: ${JOB_TIMEOUT}
+  MAX_FILE_SIZE: ${MAX_FILE_SIZE}
+  SANDBOX_RUN_MEMORY_LIMIT: ${SANDBOX_RUN_MEMORY_LIMIT}
+  SESSION_CACHE_TTL: ${SESSION_CACHE_TTL}
+  SANDBOX_ENDPOINT: http://sandbox-runner:2000/api/v2
+  EGRESS_GATEWAY_URL: http://egress_gateway:3190
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Caddy — the only internet-facing service.
+  # ---------------------------------------------------------------------------
+  # Port 443 only. Certificates come from Let's Encrypt over the TLS-ALPN
+  # challenge, which needs nothing but 443, so port 80 stays closed. That
+  # differs from the chat VM on purpose: nothing a browser visits lives here,
+  # so there is nothing to redirect.
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    container_name: caddy
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "443:443"
+    environment:
+      CODE_DOMAIN: ${CODE_DOMAIN:?CODE_DOMAIN must be set}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set}
+    volumes:
+      # The directory, not the file: a single-file bind mount keeps the old
+      # inode after `git reset --hard` and never sees an edit. See the chat
+      # VM's Caddyfile for the long version of that story.
+      - ./caddy:/etc/caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+  api:
+    image: ghcr.io/librechat-ai/code-interpreter-api@sha256:34f614538fab95eb919afba0c8140d88d6430da91399499a9c799f111e81f84a
+    container_name: api
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:3112:3112"
+    environment:
+      <<: [*internal, *execution]
+      SERVICE_PORT: "3112"
+      FILE_SERVER_URL: http://file_server:3000
+      TOOL_CALL_SERVER_URL: http://tool_call_server:3033
+      CODEAPI_HTTP_JSON_LIMIT: ${CODEAPI_HTTP_JSON_LIMIT}
+      CODEAPI_JWT_ISSUER: ${CODEAPI_JWT_ISSUER}
+      CODEAPI_JWT_AUDIENCE: ${CODEAPI_JWT_AUDIENCE}
+      CODEAPI_JWT_ALLOWED_ALGS: ${CODEAPI_JWT_ALLOWED_ALGS}
+      CODEAPI_JWT_KID: ${CODEAPI_JWT_KID:?CODEAPI_JWT_KID must be set}
+      CODEAPI_JWT_CLOCK_SKEW_SECONDS: ${CODEAPI_JWT_CLOCK_SKEW_SECONDS}
+      CODEAPI_JWT_MAX_TTL_SECONDS: ${CODEAPI_JWT_MAX_TTL_SECONDS}
+      CODEAPI_JWT_KEY_CACHE_TTL_SECONDS: ${CODEAPI_JWT_KEY_CACHE_TTL_SECONDS}
+      # The PUBLIC half only. LibreChat holds the private key; this machine
+      # never sees it.
+      CODEAPI_JWT_JWKS_JSON: ${CODEAPI_JWT_JWKS_JSON:?CODEAPI_JWT_JWKS_JSON must be set}
+    depends_on:
+      - redis
+      - tool_call_server
+
+  service-worker:
+    image: ghcr.io/librechat-ai/code-interpreter-worker@sha256:9133d406a65c88a655db161f2e99f5f8630ec7986f610b31994a80be8fd9d8f4
+    container_name: service-worker
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "127.0.0.1:3113:3113"
+    environment:
+      <<: [*internal, *execution]
+      WORKER_HEALTH_PORT: "3113"
+      PYTHON_CONCURRENCY: ${PYTHON_CONCURRENCY}
+      OTHER_CONCURRENCY: ${OTHER_CONCURRENCY}
+      CODEAPI_EXECUTION_MANIFEST_PRIVATE_KEY: ${CODEAPI_EXECUTION_MANIFEST_PRIVATE_KEY:?CODEAPI_EXECUTION_MANIFEST_PRIVATE_KEY must be set}
+    depends_on:
+      redis:
+        condition: service_started
+      sandbox-runner:
+        condition: service_healthy
+
+  egress_gateway:
+    image: ghcr.io/librechat-ai/code-interpreter-egress-gateway@sha256:aeba02f1d9892e1fd4661c51db5f7abf81a8831552b1507da5ae219701ae7988
+    container_name: egress_gateway
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      <<: *internal
+      SERVICE_NAME: egress-gateway
+      CODEAPI_HARDENED_SANDBOX_MODE: "true"
+      CODEAPI_EGRESS_LEDGER_REQUIRED: "true"
+      EGRESS_GATEWAY_PORT: "3190"
+      EGRESS_GATEWAY_FILE_SERVER_URL: http://file_server:3000
+      EGRESS_GATEWAY_TOOL_CALL_SERVER_URL: http://tool_call_server:3033
+      EGRESS_GATEWAY_MAX_TOOL_CALL_BYTES: "1048576"
+      EGRESS_GATEWAY_MAX_FILE_BYTES: ${EGRESS_GATEWAY_MAX_FILE_BYTES}
+      CODEAPI_EGRESS_GRANT_SECRET: ${CODEAPI_EGRESS_GRANT_SECRET:?CODEAPI_EGRESS_GRANT_SECRET must be set}
+    depends_on:
+      - file_server
+      - tool_call_server
+      - redis
+
+  tool_call_server:
+    image: ghcr.io/librechat-ai/code-interpreter-tool-call-server@sha256:9da5ef854b48e87caf68b0d7f102ac5fe41589981f073ff2c5ca341f5451ed09
+    container_name: tool_call_server
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      <<: *internal
+      TOOL_CALL_SERVER_PORT: "3033"
+      TOOL_CALL_REQUEST_TIMEOUT: "300000"
+      TOOL_CALL_SESSION_EXPIRY: "600"
+    depends_on:
+      - redis
+
+  # ---------------------------------------------------------------------------
+  # The sandbox: one micro-VM per execution, which is why this machine needs
+  # /dev/kvm and a VM size that supports nested virtualization.
+  # ---------------------------------------------------------------------------
+  # The published image is upstream's `sandbox-runner-true` target, which has
+  # the language packages baked in, so nothing is mounted from the host.
+  sandbox-runner:
+    image: ghcr.io/librechat-ai/code-interpreter-sandbox-runner@sha256:13a76d9d7b01b900f777f1997f2662d79069e5834431c52c140e7ccd2daeeb62
+    container_name: sandbox-runner
+    restart: unless-stopped
+    logging: *default-logging
+    privileged: false
+    devices:
+      - /dev/kvm:/dev/kvm
+    environment:
+      KVM_ENABLED: "true"
+      LAUNCHER_PACKAGES_HOST: /disabled-host-packages
+      CODEAPI_HARDENED_SANDBOX_MODE: "true"
+      EGRESS_GATEWAY_URL: http://egress_gateway:3190
+      SANDBOX_EXECUTE_BODY_LIMIT: ${SANDBOX_EXECUTE_BODY_LIMIT}
+      SANDBOX_PACKAGES_DIRECTORY: /pkgs
+      SANDBOX_LOG_LEVEL: ${SANDBOX_LOG_LEVEL}
+      SANDBOX_OUTPUT_MAX_SIZE: "65536"
+      SANDBOX_MAX_CONCURRENT_JOBS: ${SANDBOX_MAX_CONCURRENT_JOBS}
+      SANDBOX_PER_JOB_UIDS: "true"
+      SANDBOX_JOB_UID_BASE: "200000"
+      SANDBOX_JOB_GID_BASE: "200000"
+      SANDBOX_MAX_FILE_SIZE: ${MAX_FILE_SIZE}
+      SANDBOX_MAX_OUTPUT_FILES: ${EXECUTION_MANIFEST_MAX_OUTPUT_FILES}
+      SANDBOX_WORKSPACE_REAPER_MAX_AGE_SECONDS: ${SANDBOX_WORKSPACE_REAPER_MAX_AGE_SECONDS}
+      SANDBOX_RUN_TIMEOUT: ${SANDBOX_RUN_TIMEOUT}
+      SANDBOX_RUN_CPU_TIME: ${SANDBOX_RUN_CPU_TIME}
+      SANDBOX_RUN_MEMORY_LIMIT: ${SANDBOX_RUN_MEMORY_LIMIT}
+      SANDBOX_COMPILE_TIMEOUT: "30000"
+      LAUNCHER_VCPUS: ${LAUNCHER_VCPUS}
+      LAUNCHER_RAM_MIB: ${LAUNCHER_RAM_MIB}
+      LAUNCHER_LOG_LEVEL: "3"
+      # The sandbox's only network path: to the egress gateway, which serves
+      # file transfers and tool calls and nothing else. No internet.
+      SANDBOX_ALLOWED_LOCAL_NETWORK_PORT: "3190"
+      SANDBOX_FORWARD_TARGET: egress_gateway:3190
+      SANDBOX_REQUIRE_EGRESS_MANIFEST: "true"
+      SANDBOX_EXECUTION_MANIFEST_PUBLIC_KEY: ${SANDBOX_EXECUTION_MANIFEST_PUBLIC_KEY:?SANDBOX_EXECUTION_MANIFEST_PUBLIC_KEY must be set}
+      SANDBOX_RUNNER_CLOCK_SKEW_LIVENESS_LIMIT_SECONDS: "10"
+      SANDBOX_RUNNER_HEALTHCHECK_TIMEOUT_SECONDS: "2"
+    depends_on:
+      egress_gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/sandbox-runner-healthcheck.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 20s
+
+  file_server:
+    image: ghcr.io/librechat-ai/code-interpreter-file-server@sha256:c171da061c81f5f9b5283071d0ac53953acd987e763d94045fb6c1b4770236dd
+    container_name: file_server
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      <<: *internal
+      FILE_SERVER_PORT: "3000"
+      # The variables say MINIO because upstream's client library is MinIO's;
+      # it speaks plain S3, and the store behind it is Garage (below).
+      MINIO_ENDPOINT: garage
+      MINIO_PORT: "3900"
+      MINIO_USE_SSL: "false"
+      MINIO_REGION: garage
+      MINIO_BUCKET: ${FILE_STORE_BUCKET}
+      MINIO_ACCESS_KEY: ${FILE_STORE_ACCESS_KEY:?FILE_STORE_ACCESS_KEY must be set}
+      MINIO_SECRET_KEY: ${FILE_STORE_SECRET_KEY:?FILE_STORE_SECRET_KEY must be set}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE}
+      SESSION_CACHE_TTL: ${SESSION_CACHE_TTL}
+    depends_on:
+      garage:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:7.4.9-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    container_name: redis
+    restart: unless-stopped
+    logging: *default-logging
+    # Expanded inside the container, so the password is not baked into the
+    # container's command line by Compose.
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    volumes:
+      - redis_data:/data
+
+  # ---------------------------------------------------------------------------
+  # Object storage for session files: Garage, in place of upstream's MinIO.
+  # ---------------------------------------------------------------------------
+  # MinIO's community images stopped being published in late 2025 and every
+  # registry copy is now private (upstream issues #252 and #327). A fresh host
+  # cannot pull it, so upstream's own compose no longer starts on a clean
+  # machine. Garage is maintained, AGPL like MinIO, publishes official images,
+  # and covers everything the file server does: put, get, stat, list, delete,
+  # and object metadata.
+  #
+  # Single-node mode creates the layout, the access key and the bucket from the
+  # environment on first start, and checks them on every start after. Changing
+  # FILE_STORE_SECRET_KEY afterwards makes Garage refuse to start; remove the
+  # garage_meta volume to reset it (session files are disposable).
+  garage:
+    image: dxflrs/garage:v2.4.1@sha256:9c96caa2612d3411acc5b0e6701fb238dbfba33e533a6d7d3d811a4b12d0d020
+    container_name: garage
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_CONFIG_FILE: /etc/garage/garage.toml
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET must be set}
+      GARAGE_DEFAULT_ACCESS_KEY: ${FILE_STORE_ACCESS_KEY:?FILE_STORE_ACCESS_KEY must be set}
+      GARAGE_DEFAULT_SECRET_KEY: ${FILE_STORE_SECRET_KEY:?FILE_STORE_SECRET_KEY must be set}
+      GARAGE_DEFAULT_BUCKET: ${FILE_STORE_BUCKET}
+    volumes:
+      # Directories rather than single files, for the inode reason under caddy.
+      - ./garage:/etc/garage:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    healthcheck:
+      # The image is FROM scratch: no shell and no curl, only the binary.
+      test: ["CMD", "/garage", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Deletes session files older than 24 hours, hourly.
+  # ---------------------------------------------------------------------------
+  # The terms of service promise that retention, so it is enforced here rather
+  # than left to a lifecycle rule: Garage processes those once a day, which
+  # would let a file live for up to 48 hours. Writes a small metrics file that
+  # scripts/codeinterpreter-health.sh turns into an alert when cleanup fails or
+  # anything outlives 26 hours.
+  file-cleanup:
+    image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+    container_name: file-cleanup
+    restart: unless-stopped
+    logging: *default-logging
+    # A shell loop as PID 1 ignores SIGTERM, so every stop would wait out
+    # Docker's ten-second timeout. An init process forwards it.
+    init: true
+    entrypoint: ["/bin/sh", "/opt/file-cleanup/file-cleanup.sh"]
+    environment:
+      FILE_STORE_BUCKET: ${FILE_STORE_BUCKET}
+      FILE_RETENTION: ${FILE_RETENTION}
+      FILE_OVERDUE_AGE: ${FILE_OVERDUE_AGE}
+      RCLONE_CONFIG_STORE_TYPE: s3
+      RCLONE_CONFIG_STORE_PROVIDER: Other
+      RCLONE_CONFIG_STORE_ENDPOINT: http://garage:3900
+      RCLONE_CONFIG_STORE_REGION: garage
+      RCLONE_CONFIG_STORE_FORCE_PATH_STYLE: "true"
+      RCLONE_CONFIG_STORE_ACCESS_KEY_ID: ${FILE_STORE_ACCESS_KEY:?FILE_STORE_ACCESS_KEY must be set}
+      RCLONE_CONFIG_STORE_SECRET_ACCESS_KEY: ${FILE_STORE_SECRET_KEY:?FILE_STORE_SECRET_KEY must be set}
+    volumes:
+      - ./file-cleanup:/opt/file-cleanup:ro
+      - /var/lib/codeinterpreter/textfile:/metrics
+    depends_on:
+      garage:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:
+  garage_meta:
+  garage_data:

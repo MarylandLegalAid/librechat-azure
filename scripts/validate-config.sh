@@ -611,6 +611,78 @@ fi
 
 
 # =============================================================================
+group "Code interpreter module (optional) is self-consistent"
+# =============================================================================
+# The interpreter stack runs on its own VM from codeinterpreter/. Its failures
+# are quiet ones: a variable nobody sets starts a service with an empty value,
+# and a health line whose fields drift from the alert queries parses as nulls,
+# which silences the alerts instead of firing them.
+CI_COMPOSE=codeinterpreter/compose.yaml
+CI_DEFAULTS=codeinterpreter/env.defaults
+
+unpinned="$(yq -r '.services[].image' "$CI_COMPOSE" | grep -v '@sha256:[0-9a-f]\{64\}$' || true)"
+if [ -z "$unpinned" ]; then
+  pass "every interpreter image is pinned by digest"
+else
+  fail "interpreter images not pinned by digest: $(echo "$unpinned" | tr '\n' ' ')"
+fi
+
+# Every ${VAR} in the compose file must come from env.defaults or from Key
+# Vault, where scripts/codeinterpreter-seed-secrets.sh writes it.
+ci_referenced="$(grep -o '\${[A-Z_][A-Z0-9_]*' "$CI_COMPOSE" | sed 's/^\${//' | sort -u)"
+ci_defaults="$(grep -o '^[A-Z_][A-Z0-9_]*=' "$CI_DEFAULTS" | tr -d '=' | sort -u)"
+ci_seeded="$(grep -oE '^(generate|put) [A-Z][A-Z0-9-]*|put [A-Z][A-Z0-9-]* ' scripts/codeinterpreter-seed-secrets.sh \
+  | awk '{print $2}' | tr '-' '_' | sort -u)"
+ci_seeded="$ci_seeded"$'\n'"CODEAPI_EXECUTION_MANIFEST_PRIVATE_KEY"$'\n'"SANDBOX_EXECUTION_MANIFEST_PUBLIC_KEY"
+ci_missing=""
+for var in $ci_referenced; do
+  grep -qx "$var" <<<"$ci_defaults" || grep -qx "$var" <<<"$ci_seeded" || ci_missing="$ci_missing $var"
+done
+if [ -z "$ci_missing" ]; then
+  pass "every interpreter variable comes from env.defaults or the seeded vault"
+else
+  fail "interpreter variables with no source:$ci_missing"
+fi
+
+if grep -Eq '^[A-Z_]*(PASSWORD|SECRET|TOKEN|PRIVATE)[A-Z_]*=' "$CI_DEFAULTS"; then
+  fail "$CI_DEFAULTS names something that looks like a secret; secrets belong in Key Vault"
+else
+  pass "interpreter env.defaults holds no secret-shaped names"
+fi
+
+if grep -q 'CODEAPI_BRIDGE_' "$CI_COMPOSE"; then
+  fail "$CI_COMPOSE sets CODEAPI_BRIDGE_*; the bridge is meant to stay at its disabled default"
+elif grep -Fq '@bridge path /v1/bridge' codeinterpreter/caddy/Caddyfile \
+     && grep -Fq '@metrics path /metrics' codeinterpreter/caddy/Caddyfile; then
+  pass "the bridge stays disabled, and Caddy refuses /v1/bridge and /metrics"
+else
+  fail "codeinterpreter/caddy/Caddyfile no longer refuses /v1/bridge or /metrics"
+fi
+
+# The alert queries parse the health line positionally.
+health_fields="$(grep -o '[a-z_]*=\${' scripts/codeinterpreter-health.sh | tr -d '=${' | tr '\n' ' ')"
+alert_fields="$(grep -o '"[ ]*[a-z_]*=" [a-z_]*:int' infra/codeinterpreter/main.bicep | awk '{print $NF}' | sed 's/:int//' | tr '\n' ' ')"
+if [ -n "$health_fields" ] && [ "$health_fields" = "$alert_fields" ]; then
+  pass "the health snapshot line and the alert queries agree field for field"
+else
+  fail "health line fields [$health_fields] differ from the alert parse [$alert_fields]"
+fi
+
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  ci_env="$(mktemp)"
+  { cat "$CI_DEFAULTS"; for var in $ci_seeded; do echo "$var=placeholder"; done; } > "$ci_env"
+  if docker compose -f "$CI_COMPOSE" --env-file "$ci_env" config --quiet 2>/tmp/ci-compose.err; then
+    pass "interpreter compose renders with defaults plus seeded names"
+  else
+    fail "interpreter compose does not render: $(head -3 /tmp/ci-compose.err)"
+  fi
+  rm -f "$ci_env"
+else
+  echo "  – compose render skipped (docker not installed)"
+fi
+
+
+# =============================================================================
 group "The committed ARM template matches the Bicep source"
 # =============================================================================
 # infra/main.json is what the "Deploy to Azure" button reads. If it lags behind

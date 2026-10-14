@@ -75,6 +75,14 @@ jobs:
           az bicep lint --file infra/main.bicep 2>&1 | tee /tmp/lint.txt
           if grep -q ' Error ' /tmp/lint.txt; then exit 1; fi
 
+      - name: Build and lint the code interpreter template
+        run: |
+          # Optional module, deployed with the CLI rather than a portal button,
+          # so there is no committed ARM JSON to keep in sync — only a build.
+          az bicep build --file infra/codeinterpreter/main.bicep --outfile /tmp/ci-main.json
+          az bicep lint --file infra/codeinterpreter/main.bicep 2>&1 | tee /tmp/ci-lint.txt
+          if grep -q ' Error ' /tmp/ci-lint.txt; then exit 1; fi
+
   scripts:
     name: scripts
     runs-on: ubuntu-latest
@@ -117,9 +125,10 @@ jobs:
           python3 -m pip install --quiet pyyaml
           python3 - <<'PY'
           import yaml, subprocess, tempfile, os, sys
-          doc = yaml.safe_load(open('infra/cloud-init.yaml'))
           failed = False
-          for entry in doc.get('write_files', []):
+          entries = [entry for f in ('infra/cloud-init.yaml', 'infra/codeinterpreter/cloud-init.yaml')
+                     for entry in yaml.safe_load(open(f)).get('write_files', [])]
+          for entry in entries:
               if not entry['path'].endswith('.sh'):
                   continue
               body = entry['content']
