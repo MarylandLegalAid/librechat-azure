@@ -96,7 +96,7 @@ services:
   # being offered upgrades. If Renovate goes quiet for longer than upstream's
   # release cadence, check the image path before assuming there is nothing new.
   api:
-    image: ghcr.io/librechat-ai/librechat:v0.8.7
+    image: ghcr.io/librechat-ai/librechat:v0.8.8
     container_name: LibreChat
     restart: unless-stopped
     logging: *default-logging
