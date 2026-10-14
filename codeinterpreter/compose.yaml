@@ -59,8 +59,11 @@ x-execution: &execution
   LOCAL_MODE: "false"
   CODEAPI_HARDENED_SANDBOX_MODE: "true"
   CODEAPI_AUTH_PROVIDER: librechat-jwt
-  # One organization per interpreter. Strict mode rejects a token whose tenant
-  # claim differs, instead of only using this value when the claim is absent.
+  # One organization per interpreter. Strict mode makes the tenant claim
+  # mandatory and keys every session by it. It does NOT reject a token whose
+  # tenant differs from this value; only the chat VM can sign tokens at all,
+  # and it always stamps this tenant, so that is defence in depth upstream
+  # does not offer (a local patch used to; see the module docs).
   CODEAPI_JWT_SINGLE_TENANT_ID: ${CODEAPI_JWT_SINGLE_TENANT_ID:?CODEAPI_JWT_SINGLE_TENANT_ID must be set}
   CODEAPI_TENANT_ISOLATION_STRICT: "true"
   EXECUTION_MANIFEST_MAX_UPLOAD_BYTES: ${EXECUTION_MANIFEST_MAX_UPLOAD_BYTES}
