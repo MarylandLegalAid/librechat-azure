@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly cleanup of old code interpreter host artifacts
+
+[Timer]
+OnCalendar=Sun *-*-* 04:17:00 UTC
+Persistent=true
+RandomizedDelaySec=900
+Unit=codeinterpreter-host-maintenance.service
+
+[Install]
+WantedBy=timers.target

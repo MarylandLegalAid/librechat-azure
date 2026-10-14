@@ -1,0 +1,6 @@
+[Unit]
+Description=Reboot the code interpreter VM if updates require it
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'if [ -f /var/run/reboot-required ]; then systemctl reboot; fi'

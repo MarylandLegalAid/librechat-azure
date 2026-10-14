@@ -1,0 +1,38 @@
+# =============================================================================
+# Caddy — TLS for the code interpreter API.
+# =============================================================================
+# CODE_DOMAIN and ACME_EMAIL come from the environment (Key Vault). Its DNS A
+# record must point at this VM before the first start, or certificate issuance
+# fails — and Let's Encrypt allows only five failed validations per hostname
+# per hour. docs/modules/code-interpreter.md has a check to run first.
+#
+# Port 80 is closed on this machine, so the certificate comes over the TLS-ALPN
+# challenge on 443. Caddy picks that automatically when 80 is unreachable.
+#
+# Mounted as a directory (compose.yaml), so an edit arrives with the next
+# deploy. Caddy still reads it only at start; deploy restarts Caddy when this
+# directory changes.
+# =============================================================================
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$CODE_DOMAIN} {
+	# Prometheus metrics are for the health snapshot on loopback, not the world.
+	@metrics path /metrics /metrics/*
+	respond @metrics 404
+
+	# The bring-your-own-machine bridge. Disabled in compose.yaml; refused here
+	# too, so enabling it later is a deliberate two-file change.
+	@bridge path /v1/bridge /v1/bridge/*
+	respond @bridge 404
+
+	# Uploads are capped at MAX_FILE_SIZE (50 MB) by the API itself. This is a
+	# coarse outer limit with room for multipart overhead.
+	request_body {
+		max_size 60MB
+	}
+
+	reverse_proxy api:3112
+}

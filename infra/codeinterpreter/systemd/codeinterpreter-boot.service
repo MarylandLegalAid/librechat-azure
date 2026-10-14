@@ -1,0 +1,14 @@
+[Unit]
+Description=Restart the code interpreter sandbox behind a healthy egress gateway after boot
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/srv/codeinterpreter/app/scripts/codeinterpreter-refresh-sandbox.sh
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

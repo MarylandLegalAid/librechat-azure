@@ -20,8 +20,11 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULTS_FILE="$REPO_ROOT/env.defaults"
-ENV_FILE="$REPO_ROOT/.env"
+# Overridable so the code interpreter VM, which deploys from the same checkout,
+# can render codeinterpreter/.env from codeinterpreter/env.defaults with this
+# same script. See scripts/codeinterpreter-deploy.sh.
+DEFAULTS_FILE="${DEFAULTS_FILE:-$REPO_ROOT/env.defaults}"
+ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
 
 # The vault name comes from /etc/librechat-deploy.conf, which cloud-init writes
 # at provisioning time. It is the one piece of per-machine configuration that
@@ -88,7 +91,7 @@ while IFS= read -r line || [ -n "$line" ]; do
   values["$name"]="$value"
 done < "$DEFAULTS_FILE"
 
-log "loaded ${#values[@]} defaults from env.defaults"
+log "loaded ${#values[@]} defaults from ${DEFAULTS_FILE#"$REPO_ROOT"/}"
 
 
 # -----------------------------------------------------------------------------

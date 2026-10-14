@@ -1,0 +1,13 @@
+# Unattended upgrades install security patches daily but never reboot on their
+# own. This is the one window in which the machine may reboot itself, chosen for
+# when nobody is running code. Executions in flight at that moment fail.
+[Unit]
+Description=Weekly reboot window for the code interpreter VM
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 America/New_York
+Persistent=false
+Unit=codeinterpreter-reboot.service
+
+[Install]
+WantedBy=timers.target

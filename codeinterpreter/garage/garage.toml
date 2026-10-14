@@ -1,0 +1,28 @@
+# Garage, single node, as the code interpreter's session-file store.
+# See the garage service in ../compose.yaml for why Garage and not MinIO.
+#
+# No secret lives here. The RPC secret, access key and secret key come from the
+# environment (GARAGE_RPC_SECRET, GARAGE_DEFAULT_*), which deploy renders from
+# Key Vault.
+#
+# Reference: https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+# SQLite over the default LMDB: slower, but it survives an unclean shutdown
+# without a repair step, and this store holds a few hundred small files.
+db_engine = "sqlite"
+
+# One node, one copy. The files are disposable (24 hours) and the machine is a
+# single VM; replication would add nothing.
+replication_factor = 1
+
+# Cluster RPC. Bound inside the container's network namespace and never
+# published, so nothing outside this Compose project can reach it.
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# The file server signs requests for this region (MINIO_REGION in compose.yaml).
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
