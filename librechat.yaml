@@ -154,7 +154,7 @@ interface:
 
      ## 5. Code Interpreter
 
-     Code Interpreter executes uploaded files and AI-generated code in isolated temporary sandboxes hosted in Maryland Legal Aid’s Azure environment. Sandbox code has no public internet access. Temporary workspaces are removed after one hour, reusable interpreter session files after 24 hours, and files returned to a chat follow normal MLAGPT retention. Confidential client data is permitted. Users remain responsible for reviewing generated code, analysis, and files.
+     Code Interpreter executes uploaded files and AI-generated code in isolated temporary sandboxes hosted in Maryland Legal Aid’s Azure environment. Sandbox code has no public internet access. Each file sent to or returned from Code Interpreter must be under 50 MB; a larger upload fails with a general “Error processing file” message. Temporary workspaces are removed after one hour, reusable interpreter session files after 24 hours, and files returned to a chat follow normal MLAGPT retention. Confidential client data is permitted. Users remain responsible for reviewing generated code, analysis, and files.
 
      ## 6. Prohibited Use
 
