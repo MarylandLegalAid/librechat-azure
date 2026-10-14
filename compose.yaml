@@ -61,6 +61,14 @@ services:
       CHAT_DOMAIN: ${CHAT_DOMAIN}
       ADMIN_DOMAIN: ${ADMIN_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
+    labels:
+      # A hash of ./Caddyfile, set by deploy.sh. The file is bind-mounted as a
+      # single file, which Docker pins by inode: after `git reset --hard` writes a
+      # new one, the running container (and a `docker restart` of it) still sees
+      # the old one. Putting the hash in the container's definition makes `up -d`
+      # recreate Caddy exactly when the file changed, including on a rollback.
+      # docs/troubleshooting.md tells the story.
+      librechat-azure.caddyfile-sha256: ${CADDYFILE_SHA256:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${DATA_DIR}/caddy/data:/data

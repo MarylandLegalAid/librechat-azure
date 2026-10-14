@@ -244,7 +244,10 @@ LibreChat needs no change at all: `LIBRECHAT-CODE-BASEURL` stays the same.
    its `dnsLabel` hostname first.
 3. Set the new vault's `CODE-DOMAIN` to the real hostname. Leave the old machine
    running: it is your rollback.
-4. Change the hostname's A record to the new machine's address.
+4. Change the hostname's A record to the new machine's address. **From here to the end of
+   step 6, Run Code is broken** for anyone whose resolver already has the new address: the
+   new machine has no certificate for the hostname yet. Do steps 4 to 6 back to back, in a
+   quiet hour, and never change the record ahead of time.
 5. Wait for `scripts/check-dns.sh <hostname> <new address>` to say GO. Do not skip
    this; see the rate-limit warning in
    [migrating an existing install](migrating-an-existing-install.md).
