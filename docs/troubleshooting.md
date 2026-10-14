@@ -502,6 +502,12 @@ never takes.
 The file on disk is right, the deploy said `deployed … successfully`, `caddy reload` exited
 0 — and the proxy is still serving the old configuration. It will keep doing so indefinitely.
 
+`deploy.sh` now prevents this. It puts a hash of the `Caddyfile` in Caddy's container
+labels, so a changed file recreates the container on the next deploy. You can still hit it
+by editing the file on the machine, or by running `docker compose up` yourself without
+`deploy.sh`. A manual `up` also leaves the label empty, so the next deploy recreates Caddy
+once more. That is harmless.
+
 Compare the file the container sees against the one on the host:
 
 ```bash

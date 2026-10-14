@@ -310,6 +310,14 @@ bring_up_stack() {
     return 1
   fi
 
+  # compose.yaml puts this in Caddy's labels, so a changed Caddyfile changes the
+  # container's definition and `up -d` recreates it. A restart would not do: the
+  # file is a single-file bind mount, pinned by inode, and the checkout replaces
+  # it with a new one. Computed here, after any rollback reset, so it always
+  # describes the file this run is deploying.
+  CADDYFILE_SHA256="$(sha256sum Caddyfile | cut -d' ' -f1)"
+  export CADDYFILE_SHA256
+
   # Which container is serving the app right now, so we can tell afterwards
   # whether `up -d` replaced it or left it alone.
   local api_before api_after
