@@ -28,11 +28,34 @@
 	@bridge path /v1/bridge /v1/bridge/*
 	respond @bridge 404
 
-	# Uploads are capped at MAX_FILE_SIZE (50 MB) by the API itself. This is a
-	# coarse outer limit with room for multipart overhead.
-	request_body {
-		max_size 60MB
+	# Uploads: refused HERE when the whole request reaches 50 MiB, so the API
+	# never sees a file over its own MAX_FILE_SIZE. It must not: when the API
+	# rejects an oversized upload, it throws an uncaught "Controller is already
+	# closed" and the whole process restarts, killing every execution in flight
+	# (upstream #266, open). LibreChat's own default upload limit is 512 MB, so
+	# a user can send one.
+	#
+	# request_buffers makes Caddy read the body in full before contacting the
+	# API, so the limit trips before a byte is proxied. Without it the API would
+	# receive a truncated stream, which is no safer.
+	#
+	# The cost: a batch upload whose files together reach 50 MiB is refused too.
+	# Keep this in step with MAX_FILE_SIZE in env.defaults.
+	@upload path /v1/upload /v1/upload/batch
+	handle @upload {
+		request_body {
+			max_size 50MiB
+		}
+		reverse_proxy api:3112 {
+			request_buffers 51MiB
+		}
 	}
 
-	reverse_proxy api:3112
+	# Everything else is small JSON; this is only a coarse outer limit.
+	handle {
+		request_body {
+			max_size 60MB
+		}
+		reverse_proxy api:3112
+	}
 }
