@@ -303,7 +303,12 @@ has the usual host-metric alerts (CPU, memory, disk).
 
 ## Known limits
 
-- **A file of exactly 50 MiB is rejected.** The limit is "less than", not "at most".
+- **Uploads stop just short of 50 MiB.** Caddy refuses any upload request of 50 MiB,
+  framing included, before the API sees it. Upstream's API restarts itself, dropping
+  every execution in flight, when it has to reject an oversized file
+  ([#266](https://github.com/LibreChat-AI/code-interpreter/issues/266)), and LibreChat
+  allows uploads far larger than that by default. The cost is that a batch upload whose
+  files together reach 50 MiB is refused as well.
 - **The tenant claim is required but not pinned.** Strict tenant isolation makes every
   token carry a tenant and keys every session by it. It does not reject a token whose
   tenant differs from `CODEAPI_JWT_SINGLE_TENANT_ID`. Only the chat VM can sign tokens,
