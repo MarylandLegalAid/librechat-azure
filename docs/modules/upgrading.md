@@ -139,6 +139,12 @@ sudo $C stop api admin-panel
 sudo scripts/delete-duplicate-messages.sh
 sudo scripts/delete-duplicate-messages.sh --apply
 
+# 4c. v0.8.8: remove agent knowledge files whose S3 object is gone, or those
+#     agents' file search fails on every turn. Read the dry run, then apply.
+#     It must report 0 "no answer". Skip it if you never used S3 storage.
+sudo scripts/remove-dead-agent-files.sh
+sudo scripts/remove-dead-agent-files.sh --apply
+
 # 5. Run the migration from the NEW image, as a one-off container.
 sudo $C run --rm --no-deps -w /app api npm run migrate:tenant-indexes:dry-run
 sudo $C run --rm --no-deps -w /app api npm run migrate:tenant-indexes
@@ -166,6 +172,25 @@ deleting the placeholder changes nothing they rely on. New pairs keep
 appearing until the upgrade, so run it in the window, not days ahead. The only
 way back is the backup from step 1; the script's audit trail in
 `$DATA_DIR/migrations/` lists what it deleted.
+
+Why step 4c exists: v0.8.8 records which vector namespace holds each agent
+file. For files embedded before v0.8.8 it has no record, so on an agent's first
+file search it reads every knowledge file from storage and embeds it again. If
+one read fails, the whole search fails ("Failed to provision N file(s) for
+search"), on every turn. v0.8.7 searches the old vectors and never notices a
+missing original. Production had 18 agent files with `source: s3` whose objects
+were 404 in the bucket: the 17 knowledge files of one agent, and one id left in
+an old version snapshot of another. The script removes a file only when its
+record says S3 **and** a HEAD of the object, with the deployment's own AWS
+settings, returns 404; any other answer stops it before a write. It edits the
+agents' version snapshots too, because restoring a version copies its file list
+back. Run it in the window, before v0.8.8 starts: on v0.8.7 those agents still
+work. `--revert` with the apply's audit trail puts the lists back.
+
+A staging copy usually has no S3 credentials, so the HEAD cannot run there.
+Rehearse with `--head-results FILE`, where FILE is the audit trail of a
+production dry run (it records each HEAD result, and no file names). Never use
+it in production itself.
 
 Rehearse the whole sequence on a [staging copy](#a-note-on-staging) first.
 
