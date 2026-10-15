@@ -17,21 +17,21 @@ function agent(overrides) {
 /* ------------------------------------------------------------------------- */
 
 test('the uppercase wordmark is renamed', () => {
-  assert.equal(renameString('MLAGPT 4 User Agreement'), 'MLAGPT 4.1 User Agreement');
+  assert.equal(renameString('MLAGPT 4 User Agreement'), 'MLAGPT 4.2 User Agreement');
 });
 
 test('the lowercase wordmark is renamed AND normalized', () => {
-  assert.equal(renameString('mlaGPT 4'), 'MLAGPT 4.1');
+  assert.equal(renameString('mlaGPT 4'), 'MLAGPT 4.2');
 });
 
 test('a spaced spelling is renamed and closed up', () => {
-  assert.equal(renameString('MLA GPT 4'), 'MLAGPT 4.1');
+  assert.equal(renameString('MLA GPT 4'), 'MLAGPT 4.2');
 });
 
 test('every occurrence in one string is renamed, not just the first', () => {
   assert.equal(
     renameString('MLAGPT 4 is MLAGPT 4, after all'),
-    'MLAGPT 4.1 is MLAGPT 4.1, after all',
+    'MLAGPT 4.2 is MLAGPT 4.2, after all',
   );
 });
 
@@ -40,17 +40,25 @@ test('every occurrence in one string is renamed, not just the first', () => {
 /* ------------------------------------------------------------------------- */
 
 test('an already-renamed string is left completely alone', () => {
-  assert.equal(renameString('MLAGPT 4.1 User Agreement'), 'MLAGPT 4.1 User Agreement');
+  assert.equal(renameString('MLAGPT 4.2 User Agreement'), 'MLAGPT 4.2 User Agreement');
+  assert.equal(hasOldBrand('MLAGPT 4.2 Help'), false);
 });
 
 test('running the rename twice equals running it once', () => {
   const once = renameString('Welcome to mlaGPT 4 - how can I help?');
   assert.equal(renameString(once), once);
-  assert.equal(once, 'Welcome to MLAGPT 4.1 - how can I help?');
+  assert.equal(once, 'Welcome to MLAGPT 4.2 - how can I help?');
 });
 
-test('a future minor version is not touched either', () => {
-  assert.equal(renameString('MLAGPT 4.2'), 'MLAGPT 4.2');
+test('the previous release, 4.1, is renamed too', () => {
+  assert.equal(renameString('MLAGPT 4.1 User Agreement'), 'MLAGPT 4.2 User Agreement');
+  assert.equal(renameString('mlaGPT 4.1 Help'), 'MLAGPT 4.2 Help');
+});
+
+test('nothing with a further version part is touched', () => {
+  assert.equal(renameString('MLAGPT 4.1.1'), 'MLAGPT 4.1.1');
+  assert.equal(renameString('MLAGPT 4.10'), 'MLAGPT 4.10');
+  assert.equal(renameString('MLAGPT 4.3'), 'MLAGPT 4.3');
 });
 
 /* ------------------------------------------------------------------------- */
@@ -86,8 +94,8 @@ test('an agent with the old name is planned across all three live fields', () =>
   );
   assert.equal(plan.skipped, false);
   assert.deepEqual(Object.keys(plan.set).sort(), ['description', 'instructions', 'name']);
-  assert.equal(plan.set.name, 'MLAGPT 4.1 Help');
-  assert.equal(plan.set.instructions, 'You are the MLAGPT 4.1 Coach.');
+  assert.equal(plan.set.name, 'MLAGPT 4.2 Help');
+  assert.equal(plan.set.instructions, 'You are the MLAGPT 4.2 Coach.');
 });
 
 test('only the fields that actually contain the wordmark are written', () => {
@@ -116,7 +124,7 @@ test('an agent with no branding at all is skipped', () => {
 });
 
 test('an already-renamed agent is skipped, so a second apply writes nothing', () => {
-  const plan = planAgentRename(agent({ name: 'MLAGPT 4.1 Help' }));
+  const plan = planAgentRename(agent({ name: 'MLAGPT 4.2 Help' }));
   assert.equal(plan.skipped, true);
 });
 

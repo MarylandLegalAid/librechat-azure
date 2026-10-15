@@ -1,5 +1,7 @@
 /*
- * Rename the product's versioned wordmark, MLAGPT 4 -> MLAGPT 4.1.
+ * Rename the product's versioned wordmark to the current release, MLAGPT 4.2.
+ * Both earlier wordmarks are renamed: MLAGPT 4 (a restore from before
+ * 2026-08) and MLAGPT 4.1.
  *
  * No database in here on purpose — this file is pure string and object work so
  * it can be unit-tested without one. scripts/rename-brand.js is the half that
@@ -21,21 +23,22 @@
  *
  * This runs after a restore, in a cutover window, possibly twice because
  * somebody was not sure whether it had run. A second pass must be a no-op, so
- * the pattern refuses to match a version that already carries a minor part:
- * `MLAGPT 4.1` does not become `MLAGPT 4.1.1`. That is what the (?!\.\d)
- * lookahead is for, and there is a test that asserts exactly this.
+ * the pattern matches only the two old versions and never the current one:
+ * `MLAGPT 4.2` is left alone, and so is anything with a further part
+ * (`MLAGPT 4.1.1`, `MLAGPT 4.10`). That is what the (?!\.\d) lookahead is
+ * for, and there are tests that assert exactly this.
  */
 
 'use strict';
 
 /*
  * \bMLA\s?GPT   — matches both `MLAGPT` and the `mlaGPT`/`MLA GPT` spellings
- * \s+4\b        — a bare major version, so `MLAGPT 40` is left alone
- * (?!\.\d)      — but not one that already has a minor part
+ * \s+4(?:\.1)?\b — release 4 or 4.1, so `MLAGPT 40` is left alone
+ * (?!\.\d)       — and not when another part follows (4.2, 4.1.1, 4.10)
  */
-const VERSIONED_WORDMARK = /\bMLA\s?GPT\s+4\b(?!\.\d)/gi;
+const VERSIONED_WORDMARK = /\bMLA\s?GPT\s+4(?:\.1)?\b(?!\.\d)/gi;
 
-const REPLACEMENT = 'MLAGPT 4.1';
+const REPLACEMENT = 'MLAGPT 4.2';
 
 /* The agent fields that are the live, user-facing record.
  *
@@ -108,7 +111,7 @@ function planAgentRename(agent) {
 function excerpt(value, radius) {
   const width = typeof radius === 'number' ? radius : 24;
   const match = new RegExp(
-    `.{0,${width}}(?:MLA\\s?GPT\\s+4(?:\\.1)?).{0,${width}}`,
+    `.{0,${width}}(?:MLA\\s?GPT\\s+4(?:\\.[12])?).{0,${width}}`,
     'i',
   ).exec(value);
   if (!match) {

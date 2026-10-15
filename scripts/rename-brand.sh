@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Rename the versioned wordmark on agents: MLAGPT 4 -> MLAGPT 4.1.
+# Rename the versioned wordmark on agents: MLAGPT 4 or 4.1 -> MLAGPT 4.2.
 #
 #     scripts/rename-brand.sh              # dry run — changes nothing
 #     scripts/rename-brand.sh --dry-run    # the same thing, said out loud

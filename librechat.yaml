@@ -132,7 +132,7 @@ interface:
     externalUrl: "https://mdlegalaid.sharepoint.com/:b:/s/briefcase-ops-it/ESp1b64hLm9DuNO699zqDd4BTuizAgZE8QzlEjo4jv_EMA"
     openNewTab: true
     modalAcceptance: true
-    modalTitle: "MLAGPT 4.1 User Agreement"
+    modalTitle: "MLAGPT 4.2 User Agreement"
     modalContent: |
      By accessing or using MLAGPT, you acknowledge that you have read, understood, and agree to the terms below. You must click “I Agree” to continue.
 
@@ -143,6 +143,7 @@ interface:
 
       You are responsible for ensuring that any information entered into MLAGPT complies with organizational policies, confidentiality obligations, and applicable laws.
       - Always verify which features are approved for confidential or regulated data before use.
+      - Files you attach to a chat (PDFs, images, Word documents, spreadsheets) are sent with your message to the AI provider that runs the chosen model (OpenAI or Anthropic). PDFs and images are read by the model directly, page by page.
      ## 3. Web Search Is Not HIPAA-Compliant and May Violate Client Confidentiality
 
      ### Important Notice
@@ -160,11 +161,15 @@ interface:
 
      You agree to independently review, verify, and validate all outputs before relying on them for any legal, operational, or decision-making purpose.
 
-     ## 5. Code Interpreter
+     ## 5. Choosing a Preset
+
+     Standard is the default and suits most legal and administrative work. Quick is faster and less expensive, for everyday questions, short drafting and quick summaries. Deep is the most capable, for complex analysis, long documents and careful reasoning; it is slower and costs more. For very long documents, use Deep.
+
+     ## 6. Code Interpreter
 
      Code Interpreter executes uploaded files and AI-generated code in isolated temporary sandboxes hosted in Maryland Legal Aid’s Azure environment. Sandbox code has no public internet access. Each file sent to or returned from Code Interpreter must be under 50 MB; a larger upload fails with a general “Error processing file” message. Temporary workspaces are removed after one hour, reusable interpreter session files after 24 hours, and files returned to a chat follow normal MLAGPT retention. Confidential client data is permitted. Users remain responsible for reviewing generated code, analysis, and files.
 
-     ## 6. Prohibited Use
+     ## 7. Prohibited Use
 
      You agree not to use MLAGPT to:
      - Provide legal advice directly to clients without proper review
@@ -172,11 +177,11 @@ interface:
      - Bypass organizational policies, security controls, or safeguards
      - Enter sensitive data into unapproved features (including Web Search)
 
-     ## 7. Monitoring & Compliance
+     ## 8. Monitoring & Compliance
 
      Use of MLAGPT may be logged or monitored for security, compliance, and system improvement purposes, consistent with organizational policy.
 
-     ## 8. Acceptance
+     ## 9. Acceptance
 
      By clicking “I Agree”, you confirm that:
      - You understand the limitations of MLAGPT
@@ -185,7 +190,7 @@ interface:
 
      **If you do not agree, do not proceed.**
   # Greeting shown on a new chat.
-  customWelcome: "Howdy! Welcome to MLAGPT 4.1 - How can I help you today?"
+  customWelcome: "Howdy! Welcome to MLAGPT 4.2 - How can I help you today?"
 
 # =============================================================================
 # Registration
