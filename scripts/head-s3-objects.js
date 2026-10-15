@@ -47,7 +47,10 @@ async function main() {
     return;
   }
 
-  const { S3Client, HeadObjectCommand } = require('@aws-sdk/client-s3');
+  // Resolve the SDK from the app, not from /scripts: Node looks for modules
+  // next to the requiring file, and /scripts has no node_modules.
+  const appRequire = require('module').createRequire('/app/package.json');
+  const { S3Client, HeadObjectCommand } = appRequire('@aws-sdk/client-s3');
   const s3 = new S3Client({ region });
   const results = [];
 
