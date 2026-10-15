@@ -393,18 +393,17 @@ speech:
     openai:
       apiKey: '${STT_API_KEY}'
       model: 'whisper-1'
-fileConfig:
-  # No `legacyFileUploadUX`: attachments use v0.8.8's unified upload. Images
-  # and PDFs go to the model natively (the provider reads the pages, including
-  # scans); other documents (.docx, spreadsheets, text) are extracted to text
-  # and put in the prompt. Either way the file itself is sent to the AI
-  # provider, which the ToS says. A native PDF counts against the conversation's
-  # budget like any other input, so a very long one on Quick or Standard is
-  # refused with "Your messages do not fit"; the preset descriptions point to
-  # Deep. Agents' knowledge files still go through file search.
-  # There is deliberately no `stt:` block here. One existed and did nothing:
-  # LibreChat's config schema has no fileConfig.stt and strips it silently (in
-  # v0.8.7 and v0.8.8 alike), and the built-in audio list is a superset of it.
+# Attachments: no `fileConfig` block at all, on purpose. Without
+# `legacyFileUploadUX`, v0.8.8's unified upload applies. Images and PDFs go to
+# the model natively; other documents (.docx, spreadsheets, text) are extracted
+# to text and put in the prompt. (An empty `fileConfig:` key is YAML null and
+# v0.8.8 refuses to start on it.) Upload limits live in the admin panel's DB
+# override, not here.
+#
+# There is deliberately no `fileConfig.stt` either. One existed and did
+# nothing: LibreChat's config schema has no fileConfig.stt and strips it
+# silently (in v0.8.7 and v0.8.8 alike), and the built-in audio list is a
+# superset of it.
 
 # =============================================================================
 # MCP tool servers — deliberately NOT configured here
