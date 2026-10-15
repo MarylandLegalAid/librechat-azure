@@ -70,7 +70,7 @@ test('validateModelMap rejects a target that is not approved', () => {
 });
 
 test('validateModelMap rejects an approved model used as a migration source', () => {
-  const bad = { 'claude-haiku-5-5': { model: 'gpt-6-luna', provider: 'openAI' } };
+  const bad = { 'claude-haiku-4-5': { model: 'gpt-6-luna', provider: 'openAI' } };
   const problems = validateModelMap(bad, APPROVED_MODELS);
   assert.strictEqual(problems.length, 1);
   assert.match(problems[0], /must not also be a migration source/);
@@ -89,7 +89,7 @@ test('parseModelMap rejects an entry missing its provider', () => {
 
 test('an agent already on an approved model is left completely alone', () => {
   const plan = planAgentChanges(
-    agent({ model: 'claude-haiku-5-5', provider: 'anthropic' }),
+    agent({ model: 'claude-haiku-4-5', provider: 'anthropic' }),
     OPTS,
   );
   assert.strictEqual(plan.skipped, true);
@@ -124,9 +124,9 @@ test('an approved-model agent still has its history repaired, top level untouche
   // click away from a model that no longer exists.
   const plan = planAgentChanges(
     agent({
-      model: 'claude-haiku-5-5',
+      model: 'claude-haiku-4-5',
       provider: 'anthropic',
-      versions: [{ model: 'gpt-5.6-terra', provider: CUSTOM }, { model: 'claude-haiku-5-5' }],
+      versions: [{ model: 'gpt-5.6-terra', provider: CUSTOM }, { model: 'claude-haiku-4-5' }],
     }),
     OPTS,
   );
@@ -149,9 +149,9 @@ test('an approved-model agent still has its history repaired, top level untouche
 test('an approved-model agent with clean history is skipped entirely', () => {
   const plan = planAgentChanges(
     agent({
-      model: 'claude-haiku-5-5',
+      model: 'claude-haiku-4-5',
       provider: 'anthropic',
-      versions: [{ model: 'claude-haiku-5-5', provider: 'anthropic' }],
+      versions: [{ model: 'claude-haiku-4-5', provider: 'anthropic' }],
     }),
     OPTS,
   );
@@ -417,6 +417,6 @@ test('the production distribution produces exactly the expected plan', () => {
   const mixed = plans[0].set;
   assert.strictEqual(mixed['versions.0.provider'], 'openAI');
   assert.ok(!('versions.1.provider' in mixed), 'already on openAI');
-  assert.strictEqual(mixed['versions.2.model'], 'claude-haiku-5-5');
-  assert.ok(!('versions.2.provider' in mixed), 'Claude stays on anthropic');
+  // Haiku stays on 4.5 for now (env.defaults says why), so it is approved.
+  assert.ok(!('versions.2.model' in mixed), 'Haiku 4.5 is approved and stays');
 });
