@@ -104,6 +104,16 @@ for mode in "${STORAGE_MODES[@]}"; do
 
   [ -n "$version" ] && pass "$mode: schema version = $version" || fail "$mode: no version key survived the merge"
 
+  # A section left holding only comments (say `fileConfig:` after its last key
+  # is deleted) is YAML null, and LibreChat refuses to start on it. Staging hit
+  # exactly this on 2026-10-15 and rolled back.
+  null_keys="$(yq -r 'to_entries[] | select(.value == null) | .key' "$out")"
+  if [ -n "$null_keys" ]; then
+    fail "$mode: top-level key(s) with no value (YAML null): $(echo "$null_keys" | tr '\n' ' ')"
+  else
+    pass "$mode: no top-level key is empty"
+  fi
+
   rm -f "$out"
 done
 
