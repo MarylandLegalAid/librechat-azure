@@ -134,7 +134,7 @@ interface:
     modalAcceptance: true
     modalTitle: "MLAGPT 4.2 User Agreement"
     modalContent: |
-     By accessing or using MLAGPT, you acknowledge that you have read, understood, and agree to the terms below. You must click “I Agree” to continue.
+     By accessing or using MLAGPT, you acknowledge that you have read, understood, and agree to the terms below. You must click “I accept” to continue.
 
      ## 1. Purpose of MLAGPT
      MLAGPT is an internal Maryland Legal Aid AI platform designed to support legal, operational, and administrative work. It may assist with drafting, summarization, research support, and workflow efficiency. MLAGPT does not replace professional judgment, legal analysis, or official work product review.
@@ -183,7 +183,7 @@ interface:
 
      ## 9. Acceptance
 
-     By clicking “I Agree”, you confirm that:
+     By clicking “I accept”, you confirm that:
      - You understand the limitations of MLAGPT
      - You understand that Web Search is not HIPAA-compliant
      - You agree to use the platform responsibly and in accordance with organizational policy
