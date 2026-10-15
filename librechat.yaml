@@ -394,12 +394,14 @@ speech:
       apiKey: '${STT_API_KEY}'
       model: 'whisper-1'
 fileConfig:
-  # Hold the pre-v0.8.8 attachment behavior: files go through tools (file search,
-  # text extraction) rather than straight to the model. v0.8.8's new default
-  # sends images, audio, video and PDFs natively to the provider, which changes
-  # cost, behavior, and what leaves through which channel. Upgrade-parity only:
-  # UPGRADE_PLAN Phase 3 (F1) decides the new routing deliberately.
-  legacyFileUploadUX: true
+  # No `legacyFileUploadUX`: attachments use v0.8.8's unified upload. Images
+  # and PDFs go to the model natively (the provider reads the pages, including
+  # scans); other documents (.docx, spreadsheets, text) are extracted to text
+  # and put in the prompt. Either way the file itself is sent to the AI
+  # provider, which the ToS says. A native PDF counts against the conversation's
+  # budget like any other input, so a very long one on Quick or Standard is
+  # refused with "Your messages do not fit"; the preset descriptions point to
+  # Deep. Agents' knowledge files still go through file search.
   # There is deliberately no `stt:` block here. One existed and did nothing:
   # LibreChat's config schema has no fileConfig.stt and strips it silently (in
   # v0.8.7 and v0.8.8 alike), and the built-in audio list is a superset of it.
