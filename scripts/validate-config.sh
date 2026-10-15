@@ -269,6 +269,26 @@ while IFS=$'\t' read -r from to; do
   fi
 done < <(jq -r '(.specs // {}) | to_entries[] | select(.key | startswith("_") | not) | [.key, .value] | @tsv' scripts/conversation-map.json)
 
+# conversation-map.json targets on a spec: the server applies a preset only under
+# modelSpecs.enforce, so a moved conversation runs on whatever it stores. Every
+# setting the spec's preset declares must be stored with the same value, or the
+# moved conversation quietly differs from one the user starts on that preset.
+while IFS=$'\t' read -r target spec field want; do
+  [ -n "$target" ] || continue
+  got="$(jq -c --arg t "$target" --arg f "$field" '.targets[$t][$f]' scripts/conversation-map.json)"
+  if [ "$got" = "$want" ]; then
+    pass "conversation-map.json target '$target' has spec '$spec' $field $want"
+  else
+    fail "conversation-map.json target '$target': $field is $got, but spec '$spec' sets $want"
+  fi
+done < <(jq -r '.targets | to_entries[] | select(.key | startswith("_") | not)
+                | select(.value.spec != null) | [.key, .value.spec] | @tsv' scripts/conversation-map.json \
+  | while IFS=$'\t' read -r target spec; do
+      SPEC="$spec" yq -o=json -I=0 '.modelSpecs.list[] | select(.name == strenv(SPEC)) | .preset | to_entries[]
+          | select(.key != "promptPrefix" and .key != "instructions" and .key != "greeting")' librechat.yaml \
+        | jq -r --arg t "$target" --arg s "$spec" '[$t, $s, .key, (.value | tojson)] | @tsv'
+    done)
+
 while IFS= read -r endpoint; do
   [ -n "$endpoint" ] || continue
   if known_endpoint "$endpoint"; then

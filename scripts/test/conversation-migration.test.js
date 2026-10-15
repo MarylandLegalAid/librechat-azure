@@ -143,6 +143,7 @@ test('an old openAI conversation moves to GPT-6 with the full field set', () => 
   assert.deepStrictEqual(plan.set, {
     model: 'gpt-6.1-sol',
     spec: 'standard',
+    reasoning_effort: 'medium',
     useResponsesApi: true,
     maxContextTokens: 250000,
   });
@@ -163,6 +164,7 @@ test('a conversation on the retired custom endpoint moves to the built-in one', 
     endpoint: 'openAI',
     model: 'gpt-6-luna',
     spec: 'quick',
+    reasoning_effort: 'medium',
     maxContextTokens: 250000,
   });
   assert.deepStrictEqual(plan.unset, ['endpointType']);
@@ -267,6 +269,7 @@ test('a revert restores old values, removes added fields, and is guarded by the 
   assert.strictEqual(update.$set.model, 'gpt-5.4');
   assert.deepStrictEqual(Object.keys(update.$unset).sort(), [
     'maxContextTokens',
+    'reasoning_effort',
     'spec',
     'useResponsesApi',
   ]);
