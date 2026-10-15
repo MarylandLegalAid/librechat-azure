@@ -1,5 +1,6 @@
 /*
- * Move conversations on retired models onto their successors.
+ * Move conversations, saved presets and favorites on retired models onto their
+ * successors.
  *
  * ⚠️  Do not run this file directly. Run scripts/migrate-conversations.sh, which
  * supplies the map, chooses the mode, and keeps the audit trail.
@@ -16,7 +17,7 @@
  *                                     audit trail to undo (revert mode)
  */
 
-/* globals db, load, print, quit, globalThis, require */
+/* globals db, load, print, quit, globalThis, require, ObjectId */
 
 'use strict';
 
@@ -26,6 +27,7 @@ const {
   parseConversationMap,
   validateConversationMap,
   planConversation,
+  planFavorites,
   updateFor,
   revertFor,
   summarize,
@@ -53,19 +55,31 @@ function emitAudit(record) {
   print('===CHANGELOG-JSON-END===');
 }
 
-function bulkApply(ops) {
+function bulkApply(ops, collection) {
   let matched = 0;
   let modified = 0;
   for (let i = 0; i < ops.length; i += BATCH) {
     const batch = ops.slice(i, i + BATCH).map((op) => ({
       updateOne: { filter: op.filter, update: op.update },
     }));
-    const result = db.conversations.bulkWrite(batch, { ordered: false });
+    const result = db[collection || 'conversations'].bulkWrite(batch, { ordered: false });
     matched += result.matchedCount;
     modified += result.modifiedCount;
   }
   return { matched, modified };
 }
+
+/*
+ * Favorites are a whole array per user. Each write applies only while the array
+ * is exactly what was read, so a user who changed their pins in between wins,
+ * and a revert puts the old array back only over the one this run wrote.
+ */
+const favoriteOp = (userId, expected, replacement) => ({
+  filter: { _id: userId, favorites: expected },
+  update: { $set: { favorites: replacement } },
+});
+const describeFavorite = (fav) =>
+  fav.spec ? `spec ${fav.spec}` : `${fav.endpoint} / ${fav.model}`;
 
 /* ========================================================================= */
 /* Revert                                                                    */
@@ -78,20 +92,29 @@ if (REVERT_FILE) {
     quit(2);
   }
   const ops = audit.moves.map(revertFor);
-  print(`Audit trail     : ${audit.timestamp}, ${audit.moves.length} conversation(s) moved`);
+  const presetOps = (audit.presetMoves || []).map(revertFor);
+  const favoriteOps = (audit.favoriteMoves || []).map((f) =>
+    favoriteOp(ObjectId(f.user), f.next, f.before));
+  print(`Audit trail     : ${audit.timestamp}, ${audit.moves.length} conversation(s), ` +
+    `${presetOps.length} preset(s), ${favoriteOps.length} user(s)' favorites moved`);
   print('Each is put back only if it is still exactly where that run left it.');
   print('');
 
   let result = { matched: 0, modified: 0 };
-  if (APPLY) {
-    result = bulkApply(ops);
-    print(`  ${result.modified} conversation(s) restored.`);
-    print(`  ${ops.length - result.matched} skipped: changed since (a user picked another model).`);
-  } else {
-    const stillThere = ops.filter((op) => db.conversations.countDocuments(op.filter) > 0).length;
-    print(`  ${stillThere} of ${ops.length} would be restored; the rest changed since.`);
-    print('  Nothing was changed. Run with --apply to restore.');
-  }
+  const groups = [['conversations', ops], ['presets', presetOps], ['users', favoriteOps]];
+  groups.forEach(([collection, group]) => {
+    if (!group.length) return;
+    if (APPLY) {
+      const r = bulkApply(group, collection);
+      result.matched += r.matched;
+      result.modified += r.modified;
+      print(`  ${collection}: ${r.modified} restored, ${group.length - r.matched} skipped (changed since).`);
+    } else {
+      const stillThere = group.filter((op) => db[collection].countDocuments(op.filter) > 0).length;
+      print(`  ${collection}: ${stillThere} of ${group.length} would be restored; the rest changed since.`);
+    }
+  });
+  if (!APPLY) print('  Nothing was changed. Run with --apply to restore.');
   print('');
   emitAudit({
     timestamp: new Date().toISOString(),
@@ -177,6 +200,60 @@ print(`  Conversations to move : ${summary.counts.move}`);
 print(`  Already on a kept model: ${summary.counts.keep}`);
 print('');
 
+/* --- Saved presets: the same fields as a conversation, keyed by presetId --- */
+const presetFields = Object.assign({ presetId: 1 }, fields);
+delete presetFields.conversationId;
+const presets = db.presets.find({ endpoint: { $in: endpoints } }, presetFields).toArray();
+let presetPlans;
+try {
+  presetPlans = presets.map((preset) => planConversation(preset, map, { idField: 'presetId' }));
+} catch (error) {
+  print('');
+  print('ERROR (presets) — nothing has been changed:');
+  print(`  ${error.message}`);
+  print('');
+  quit(1);
+}
+const presetSummary = summarize(presetPlans);
+const presetMoves = presetPlans.filter((plan) => plan.action === 'move');
+rule();
+print('  Saved presets');
+rule();
+Object.keys(presetSummary.routes).sort().forEach((route) => {
+  print(`  ${route}: ${presetSummary.routes[route].count}`);
+});
+print(`  Presets to move: ${presetMoves.length} of ${presets.length} on migrated endpoints`);
+print('');
+
+/* --- Favorites pinned in the model selector ------------------------------ */
+const favoriteUsers = db.users.find({ 'favorites.0': { $exists: true } }, { favorites: 1 }).toArray();
+const favoriteMoves = [];
+try {
+  favoriteUsers.forEach((user) => {
+    const plan = planFavorites(user.favorites, map);
+    if (plan.changed) {
+      favoriteMoves.push({ user: String(user._id), before: user.favorites, next: plan.next, changes: plan.changes });
+    }
+  });
+} catch (error) {
+  print('');
+  print('ERROR (favorites) — nothing has been changed:');
+  print(`  ${error.message}`);
+  print('');
+  quit(1);
+}
+rule();
+print('  Favorites (agent favorites are never touched)');
+rule();
+const favoriteRoutes = {};
+favoriteMoves.forEach((move) => move.changes.forEach((change) => {
+  const key = `${describeFavorite(change.from)} -> ${change.to ? describeFavorite(change.to) : '(duplicate, dropped)'}`;
+  favoriteRoutes[key] = (favoriteRoutes[key] || 0) + 1;
+}));
+Object.keys(favoriteRoutes).sort().forEach((key) => print(`  ${key}: ${favoriteRoutes[key]}`));
+print(`  Users whose favorites change: ${favoriteMoves.length} of ${favoriteUsers.length}`);
+print('');
+
 /* ========================================================================= */
 /* Apply                                                                     */
 /* ========================================================================= */
@@ -190,6 +267,17 @@ if (APPLY) {
   if (result.matched < moves.length) {
     print(`  ${moves.length - result.matched} skipped: changed between reading and writing.`);
   }
+  const presetResult = bulkApply(presetMoves.map(updateFor), 'presets');
+  print(`  ${presetResult.modified} preset(s) moved.`);
+  if (presetResult.matched < presetMoves.length) {
+    print(`  ${presetMoves.length - presetResult.matched} preset(s) skipped: changed between reading and writing.`);
+  }
+  const favoriteResult = bulkApply(
+    favoriteMoves.map((f) => favoriteOp(ObjectId(f.user), f.before, f.next)), 'users');
+  print(`  ${favoriteResult.modified} user(s)' favorites updated.`);
+  if (favoriteResult.matched < favoriteMoves.length) {
+    print(`  ${favoriteMoves.length - favoriteResult.matched} skipped: favorites changed between reading and writing.`);
+  }
   print('');
 
   /* Verify in the same run: nothing left on a migrated endpoint and model. */
@@ -202,7 +290,19 @@ if (APPLY) {
     const n = db.conversations.countDocuments({ endpoint, model: { $in: mapped } });
     stragglers += n;
     print(`  ${n === 0 ? '✓' : '✗'} ${endpoint}: ${n} conversation(s) still on a mapped model`);
+    const p = db.presets.countDocuments({ endpoint, model: { $in: mapped } });
+    stragglers += p;
+    print(`  ${p === 0 ? '✓' : '✗'} ${endpoint}: ${p} preset(s) still on a mapped model`);
+    const f = db.users.countDocuments({ favorites: { $elemMatch: { endpoint, model: { $in: mapped } } } });
+    stragglers += f;
+    print(`  ${f === 0 ? '✓' : '✗'} ${endpoint}: ${f} user(s) with a favorite on a mapped model`);
   });
+  const retiredSpecs = Object.keys(map.specs);
+  if (retiredSpecs.length) {
+    const fs2 = db.users.countDocuments({ favorites: { $elemMatch: { spec: { $in: retiredSpecs } } } });
+    stragglers += fs2;
+    print(`  ${fs2 === 0 ? '✓' : '✗'} ${fs2} user(s) with a favorite on a retired spec`);
+  }
   print('');
   if (stragglers) {
     print('  Some conversations did not move. Re-run the dry run to see where they are.');
@@ -226,6 +326,17 @@ emitAudit({
   map: globalThis.CONVERSATION_MAP_RAW,
   summary,
   // Everything --revert needs, and no titles.
+  presetMoves: presetMoves.map((plan) => ({
+    conversationId: plan.conversationId,
+    idField: plan.idField,
+    user: plan.user,
+    from: plan.from,
+    target: plan.target,
+    set: plan.set,
+    unset: plan.unset,
+    before: plan.before,
+  })),
+  favoriteMoves: favoriteMoves.map((f) => ({ user: f.user, before: f.before, next: f.next })),
   moves: moves.map((plan) => ({
     conversationId: plan.conversationId,
     user: plan.user,

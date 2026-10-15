@@ -217,6 +217,11 @@ How the script behaves:
 - **An unmapped model stops everything**, as with agents.
 - **Each update applies only while the conversation is still where the dry run found
   it.** A user who changed model in between made the newer decision.
+- **Saved presets and favorites move in the same run.** A preset has the same fields as
+  a conversation, so the same targets apply. A favorite `{ endpoint, model }` follows the
+  same table, and a favorite `{ spec }` follows the map's `specs` (retired spec → its
+  successor). Favorites that land on the same successor are kept once. Agent favorites
+  are never touched.
 - **Endpoints not listed are never touched.** `agents` conversations follow their
   agent.
 

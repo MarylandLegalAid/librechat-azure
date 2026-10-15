@@ -256,6 +256,19 @@ while IFS=$'\t' read -r target endpoint model spec; do
 done < <(jq -r '.targets | to_entries[] | select(.key | startswith("_") | not)
                 | [.key, .value.endpoint, .value.model, (.value.spec // "")] | @tsv' scripts/conversation-map.json)
 
+# conversation-map.json specs: a favorite moved onto a spec that does not exist
+# would pin nothing. A retired spec still in the config would never be retired.
+while IFS=$'\t' read -r from to; do
+  [ -n "$from" ] || continue
+  if ! printf '%s\n' "${SPEC_NAMES[@]}" | grep -qxF "$to"; then
+    fail "conversation-map.json spec '$from' -> '$to': '$to' is not a modelSpecs entry"
+  elif printf '%s\n' "${SPEC_NAMES[@]}" | grep -qxF "$from"; then
+    fail "conversation-map.json retires spec '$from', but modelSpecs still has it"
+  else
+    pass "conversation-map.json spec '$from' -> '$to' resolves"
+  fi
+done < <(jq -r '(.specs // {}) | to_entries[] | select(.key | startswith("_") | not) | [.key, .value] | @tsv' scripts/conversation-map.json)
+
 while IFS= read -r endpoint; do
   [ -n "$endpoint" ] || continue
   if known_endpoint "$endpoint"; then

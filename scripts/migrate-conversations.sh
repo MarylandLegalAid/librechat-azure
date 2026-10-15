@@ -17,6 +17,11 @@
 # maxContextTokens) — the fields a conversation the UI created on that model
 # would have.
 #
+# The same run moves saved presets (they carry the same fields, so the same
+# targets apply) and favorites pinned in the model selector: { endpoint, model }
+# through the same table, { spec } through the map's `specs`. Agent favorites
+# are never touched. Both are in the audit trail and --revert.
+#
 # What it never changes: messages. Each records which model actually wrote it.
 # Nor updatedAt, so nobody's sidebar reorders.
 #

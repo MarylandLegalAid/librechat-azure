@@ -195,6 +195,36 @@ test('an Opus 5 agent changes model but keeps its Anthropic provider', () => {
   assert.strictEqual(plan.changes.length, 1);
 });
 
+test('a stored useResponsesApi: false is removed, everywhere (M14)', () => {
+  const plan = planAgentChanges(
+    agent({
+      model: 'gpt-5.6-luna',
+      provider: CUSTOM,
+      model_parameters: { useResponsesApi: false, temperature: 1 },
+      versions: [
+        { model: 'gpt-5.6-luna', provider: CUSTOM, model_parameters: { useResponsesApi: false } },
+        { model: 'gpt-6-luna', provider: 'openAI', model_parameters: { useResponsesApi: true } },
+      ],
+    }),
+    OPTS,
+  );
+  assert.deepStrictEqual(plan.unset, [
+    'model_parameters.useResponsesApi',
+    'versions.0.model_parameters.useResponsesApi',
+  ]);
+  assert.ok(!('model_parameters.temperature' in plan.set), 'other parameters are untouched');
+});
+
+test('an agent already on an approved model still loses useResponsesApi: false', () => {
+  const plan = planAgentChanges(
+    agent({ model: 'gpt-6-luna', provider: 'openAI', model_parameters: { useResponsesApi: false } }),
+    OPTS,
+  );
+  assert.strictEqual(plan.skipped, false);
+  assert.deepStrictEqual(plan.set, {});
+  assert.deepStrictEqual(plan.unset, ['model_parameters.useResponsesApi']);
+});
+
 /* ------------------------------------------------------------------------- */
 /* Version history                                                           */
 /* ------------------------------------------------------------------------- */
