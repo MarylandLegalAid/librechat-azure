@@ -28,6 +28,7 @@
  *
  *   targets: { <name>: { <conversation field>: <value or null>, ... } }
  *   sources: { <endpoint>: { keep: [<model>...], map: { <model>: <target name> } } }
+ *   specs:   { <retired modelSpecs name>: <its successor's name> }   (optional)
  *
  * A target lists every field a moved conversation should end up with. `null`
  * means "remove this field". `endpoint` and `model` are required, because they
@@ -61,7 +62,13 @@ function parseConversationMap(raw) {
     sources[endpoint] = { keep, map };
   });
 
-  return { targets, sources };
+  const specs = {};
+  Object.keys(raw.specs || {}).forEach((name) => {
+    if (name.indexOf('_') === 0) return;
+    specs[name] = raw.specs[name];
+  });
+
+  return { targets, sources, specs };
 }
 
 /*
@@ -134,11 +141,19 @@ const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * Deliberately NOT returned: the conversation's title. Titles are user content
  * and can name clients; nothing this tool prints or keeps needs them.
  */
-function planConversation(convo, map) {
-  const conversationId = convo.conversationId || (convo._id ? String(convo._id) : '(no id)');
+/*
+ * Saved presets have the same fields as a conversation (endpoint, model, spec,
+ * parameters), so the same planner moves them; only the key differs. Pass
+ * { idField: 'presetId' } for a preset. The plan keeps the name of the key it
+ * used, under `idField`, so updates and reverts address the right document.
+ */
+function planConversation(convo, map, options) {
+  const idField = (options && options.idField) || 'conversationId';
+  const conversationId = convo[idField] || (convo._id ? String(convo._id) : '(no id)');
   const user = convo.user ? String(convo.user) : null;
   const from = { endpoint: convo.endpoint, model: convo.model };
   const base = { conversationId, user, from };
+  if (idField !== 'conversationId') base.idField = idField;
 
   const source = map.sources[convo.endpoint];
   if (!source) {
@@ -191,14 +206,11 @@ function updateFor(plan) {
       update.$unset[field] = '';
     });
   }
-  return {
-    filter: {
-      conversationId: plan.conversationId,
-      endpoint: plan.from.endpoint,
-      model: plan.from.model,
-    },
-    update,
-  };
+  const filter = {};
+  filter[plan.idField || 'conversationId'] = plan.conversationId;
+  filter.endpoint = plan.from.endpoint;
+  filter.model = plan.from.model;
+  return { filter, update };
 }
 
 /*
@@ -207,7 +219,8 @@ function updateFor(plan) {
  */
 function revertFor(entry) {
   const after = Object.assign({}, entry.from, entry.set);
-  const filter = { conversationId: entry.conversationId };
+  const filter = {};
+  filter[entry.idField || 'conversationId'] = entry.conversationId;
   ['endpoint', 'model'].forEach((field) => {
     filter[field] = after[field];
   });
@@ -250,8 +263,65 @@ function summarize(plans, convosById, recentSince) {
   return { total: plans.length, counts, routes };
 }
 
+/*
+ * A user's favorites: the models, specs and agents pinned in the model selector.
+ * Each entry is { agentId }, { spec } or { endpoint, model }. A favorite on a
+ * retired model or spec would sit in the menu pointing at something that no
+ * longer exists, so it moves the way a conversation would:
+ *
+ *   { endpoint, model } — through `sources`, to the target's endpoint and model
+ *   { spec }            — through `specs`, to the successor spec
+ *   { agentId }         — never touched; the agent itself is migrated
+ *
+ * Moving two favorites onto the same successor would pin it twice, so the
+ * second copy is dropped. An unmapped model on a migrated endpoint throws, as
+ * for conversations; an unknown spec that is not being retired is left alone.
+ *
+ * Returns { changed, next, changes: [ { from, to } ] }; `to` is null for a
+ * dropped duplicate.
+ */
+function planFavorites(favorites, map) {
+  const next = [];
+  const changes = [];
+  const seen = {};
+  const keyOf = (fav) => JSON.stringify(
+    Object.keys(fav).sort().reduce((acc, k) => { acc[k] = fav[k]; return acc; }, {}),
+  );
+
+  (Array.isArray(favorites) ? favorites : []).forEach((fav) => {
+    let moved = fav;
+    if (fav && typeof fav.spec === 'string' && map.specs[fav.spec]) {
+      moved = Object.assign({}, fav, { spec: map.specs[fav.spec] });
+    } else if (fav && typeof fav.endpoint === 'string' && typeof fav.model === 'string') {
+      const source = map.sources[fav.endpoint];
+      if (source && source.keep.indexOf(fav.model) === -1) {
+        const targetName = source.map[fav.model];
+        if (!targetName) {
+          throw new Error(
+            `A favorite is on ${fav.endpoint} / ${fav.model}, which conversation-map.json ` +
+              `neither keeps nor maps. Add a row for it. Refusing to guess.`,
+          );
+        }
+        const target = map.targets[targetName];
+        moved = Object.assign({}, fav, { endpoint: target.endpoint, model: target.model });
+      }
+    }
+    const key = keyOf(moved);
+    if (seen[key]) {
+      changes.push({ from: fav, to: null });
+      return;
+    }
+    seen[key] = true;
+    if (moved !== fav) changes.push({ from: fav, to: moved });
+    next.push(moved);
+  });
+
+  return { changed: changes.length > 0, next, changes };
+}
+
 const exported = {
   ABSENT,
+  planFavorites,
   parseConversationMap,
   validateConversationMap,
   planConversation,

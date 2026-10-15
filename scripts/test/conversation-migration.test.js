@@ -20,6 +20,7 @@ const {
   parseConversationMap,
   validateConversationMap,
   planConversation,
+  planFavorites,
   updateFor,
   revertFor,
   summarize,
@@ -283,4 +284,66 @@ test('summarize counts moves per route and recent use', () => {
   const s = summarize(convos.map((c) => planConversation(c, MAP)), byId, new Date(now - 30 * 86400000));
   assert.deepStrictEqual(s.counts, { ignore: 0, keep: 1, move: 2 });
   assert.deepStrictEqual(s.routes['openAI / gpt-5.4 -> gpt-6.1-sol'], { count: 2, recent: 1 });
+});
+
+/* ------------------------------------------------------------------------- */
+/* Saved presets                                                             */
+/* ------------------------------------------------------------------------- */
+
+test('a saved preset moves like a conversation, keyed by presetId', () => {
+  const preset = { presetId: 'p-1', user: 'u-1', endpoint: CUSTOM, endpointType: 'custom', model: 'gpt-5.6-terra', spec: 'gpt-5.6-terra', useResponsesApi: true };
+  const plan = planConversation(preset, MAP, { idField: 'presetId' });
+  assert.strictEqual(plan.action, 'move');
+  assert.strictEqual(plan.conversationId, 'p-1');
+  assert.strictEqual(plan.set.model, 'gpt-6.1-sol');
+  assert.strictEqual(plan.set.spec, 'standard');
+  const { filter } = updateFor(plan);
+  assert.deepStrictEqual(filter, { presetId: 'p-1', endpoint: CUSTOM, model: 'gpt-5.6-terra' });
+  const revert = revertFor(JSON.parse(JSON.stringify(plan)));
+  assert.deepStrictEqual(revert.filter, { presetId: 'p-1', endpoint: 'openAI', model: 'gpt-6.1-sol' });
+});
+
+/* ------------------------------------------------------------------------- */
+/* Favorites                                                                 */
+/* ------------------------------------------------------------------------- */
+
+test('favorites on retired models and specs move; agent favorites stay', () => {
+  // The shapes found in production on 2026-10-15.
+  const plan = planFavorites(
+    [
+      { agentId: 'agent_a' },
+      { endpoint: 'openAI', model: 'gpt-5.5' },
+      { endpoint: 'anthropic', model: 'claude-sonnet-4-5' },
+      { spec: 'gpt-5.6-sol' },
+    ],
+    MAP,
+  );
+  assert.strictEqual(plan.changed, true);
+  assert.deepStrictEqual(plan.next, [
+    { agentId: 'agent_a' },
+    { endpoint: 'openAI', model: 'gpt-6.1-sol' },
+    { endpoint: 'anthropic', model: 'claude-sonnet-5-5' },
+    { spec: 'standard' },
+  ]);
+  assert.strictEqual(plan.changes.length, 3);
+});
+
+test('a favorite on the retired custom endpoint moves to the built-in one', () => {
+  const plan = planFavorites([{ endpoint: CUSTOM, model: 'gpt-5.6-luna' }], MAP);
+  assert.deepStrictEqual(plan.next, [{ endpoint: 'openAI', model: 'gpt-6-luna' }]);
+});
+
+test('two favorites landing on one successor keep a single pin', () => {
+  const plan = planFavorites(
+    [{ endpoint: 'anthropic', model: 'claude-opus-4-5' }, { endpoint: 'anthropic', model: 'claude-opus-4-8' }],
+    MAP,
+  );
+  assert.deepStrictEqual(plan.next, [{ endpoint: 'anthropic', model: 'claude-opus-5-5' }]);
+  assert.strictEqual(plan.changes[1].to, null);
+});
+
+test('current favorites are left alone, and an unmapped model stops the run', () => {
+  const kept = planFavorites([{ endpoint: 'openAI', model: 'gpt-6-luna' }, { spec: 'deep' }], MAP);
+  assert.strictEqual(kept.changed, false);
+  assert.throws(() => planFavorites([{ endpoint: 'openAI', model: 'o1-pro' }], MAP), /Refusing to guess/);
 });

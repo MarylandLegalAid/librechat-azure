@@ -173,9 +173,17 @@ if (APPLY) {
       return id === plan.agentId;
     })[0];
 
-    const result = db.agents.updateOne({ _id: agent._id }, { $set: plan.set });
+    const update = {};
+    if (Object.keys(plan.set).length) update.$set = plan.set;
+    if (plan.unset.length) {
+      update.$unset = {};
+      plan.unset.forEach((path) => {
+        update.$unset[path] = '';
+      });
+    }
+    const result = db.agents.updateOne({ _id: agent._id }, update);
     written += result.modifiedCount;
-    print(`  ${plan.agentId} | ${plan.name} | ${Object.keys(plan.set).length} field(s) written`);
+    print(`  ${plan.agentId} | ${plan.name} | ${Object.keys(plan.set).length + plan.unset.length} field(s) written`);
   });
 
   print('');
@@ -214,9 +222,22 @@ if (APPLY) {
   } else {
     print('  ✓ every versions[].model is in the approved list');
   }
+
+  // M14: an explicit false keeps Chat Completions on the built-in endpoint.
+  const optedOut = db.agents.countDocuments({
+    $or: [
+      { 'model_parameters.useResponsesApi': false },
+      { 'versions.model_parameters.useResponsesApi': false },
+    ],
+  });
+  if (optedOut) {
+    print(`  ✗ FAILED — ${optedOut} agent(s) still store useResponsesApi: false`);
+  } else {
+    print('  ✓ no agent stores useResponsesApi: false');
+  }
   print('');
 
-  if (stragglers.length || versionStragglers.length) {
+  if (stragglers.length || versionStragglers.length || optedOut) {
     print('  The migration did not fully succeed. Do not close the window.');
   }
 } else {

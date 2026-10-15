@@ -39,7 +39,8 @@ const APPROVED_MODELS = [
  *     skipped: bool,          // already on an approved model
  *     changes: [ { field, from, to } ],
  *     warnings: [ string ],
- *     set: { <mongo field path>: value }
+ *     set: { <mongo field path>: value },
+ *     unset: [ <mongo field path> ]
  *   }
  *
  * Throws on a model with no mapping. Silently skipping an unmapped model is the
@@ -56,6 +57,22 @@ function planAgentChanges(agent, options) {
   const changes = [];
   const warnings = [];
   const set = {};
+  const unset = [];
+
+  /*
+   * A stored useResponsesApi: false is removed wherever it appears (UPGRADE_PLAN
+   * M14). The built-in openAI endpoint routes GPT-6 to the Responses API only
+   * while the flag is unset; an explicit false keeps Chat Completions, where
+   * tool use can fail. The custom endpoint used to override it server-side; the
+   * built-in endpoint cannot. Removing it is a no-op for Anthropic models.
+   */
+  const clearResponsesOptOut = (params, path) => {
+    if (params && params.useResponsesApi === false) {
+      changes.push({ field: `${path}.useResponsesApi`, from: false, to: '(unset)' });
+      unset.push(`${path.replace(/\[(\d+)\]/g, '.$1')}.useResponsesApi`);
+    }
+  };
+  clearResponsesOptOut(agent.model_parameters, 'model_parameters');
 
   const isApproved = (model) => approved.indexOf(model) !== -1;
 
@@ -119,6 +136,9 @@ function planAgentChanges(agent, options) {
    * rather than repair it.
    */
   (agent.versions || []).forEach((version, index) => {
+    if (version) {
+      clearResponsesOptOut(version.model_parameters, `versions[${index}].model_parameters`);
+    }
     if (!version || !version.model || isApproved(version.model)) {
       return;
     }
@@ -156,6 +176,7 @@ function planAgentChanges(agent, options) {
     changes,
     warnings,
     set,
+    unset,
   };
 }
 

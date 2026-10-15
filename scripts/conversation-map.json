@@ -36,7 +36,12 @@
     "standard. maxContextTokens is those presets' 250000, below the 272K tier",
     "where GPT-6 prices double; the old 380000 would cross it. useResponsesApi is",
     "set true, which also clears any stored false (M14). Claude conversations go",
-    "to the 5.5 model of the same family, on the raw selector (no spec)."
+    "to the 5.5 model of the same family, on the raw selector (no spec).",
+    "",
+    "specs: retired modelSpecs names and their successors, for favorites pinned in",
+    "the model selector (saved presets and conversations carry their spec in the",
+    "targets above). The same scripts also move saved presets, which have the same",
+    "fields as a conversation, and favorites on a retired endpoint and model."
   ],
   "targets": {
     "gpt-6-luna": {
@@ -113,5 +118,10 @@
         "claude-haiku-4-5": "claude-haiku-5-5"
       }
     }
+  },
+  "specs": {
+    "gpt-5.6-luna": "quick",
+    "gpt-5.6-terra": "standard",
+    "gpt-5.6-sol": "standard"
   }
 }
