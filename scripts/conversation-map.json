@@ -43,7 +43,13 @@
     "targets above). The same scripts also move saved presets, which have the same",
     "fields as a conversation, and favorites on a retired endpoint and model.",
     "",
-    "2026-10-15, later: Haiku stays on claude-haiku-4-5 for now (see env.defaults)."
+    "2026-10-15, later: Haiku stays on claude-haiku-4-5 for now (see env.defaults).",
+    "",
+    "2026-10-15, later still: the GPT-6 targets also carry their preset's",
+    "reasoning_effort. Without modelSpecs.enforce the server never applies a preset;",
+    "the browser sends what the conversation holds, so a moved conversation without",
+    "it runs at the provider's default effort, not the preset's (staging check).",
+    "validate-config.sh checks that a target agrees with its spec's preset."
   ],
   "targets": {
     "gpt-6-luna": {
@@ -51,6 +57,7 @@
       "endpointType": null,
       "model": "gpt-6-luna",
       "spec": "quick",
+      "reasoning_effort": "medium",
       "useResponsesApi": true,
       "maxContextTokens": 250000
     },
@@ -59,6 +66,7 @@
       "endpointType": null,
       "model": "gpt-6.1-sol",
       "spec": "standard",
+      "reasoning_effort": "medium",
       "useResponsesApi": true,
       "maxContextTokens": 250000
     },
