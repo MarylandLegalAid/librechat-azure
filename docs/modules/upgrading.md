@@ -134,6 +134,11 @@ sudo $C pull api
 #    through it. MongoDB itself stays up.
 sudo $C stop api admin-panel
 
+# 4b. v0.8.8: delete duplicate reply placeholders, or step 5 fails with E11000
+#     on messages. Read the dry run, then apply. It must report 0 unresolved.
+sudo scripts/delete-duplicate-messages.sh
+sudo scripts/delete-duplicate-messages.sh --apply
+
 # 5. Run the migration from the NEW image, as a one-off container.
 sudo $C run --rm --no-deps -w /app api npm run migrate:tenant-indexes:dry-run
 sudo $C run --rm --no-deps -w /app api npm run migrate:tenant-indexes
@@ -147,6 +152,20 @@ Because step 3 already moved the checkout, step 6 sees no change of commit and s
 has nothing to roll back to. That is intended. From step 5 on, the way back is a
 **restore**, not a revert. If step 5 fails, nothing has been dropped yet: keep the
 writers stopped, fix what it reports, and run it again.
+
+A failure in step 5 while it is still *building* indexes (the error names
+`createIndex`) leaves a database the old version runs on unchanged. If the fix
+is not quick, abandon the window instead: revert the merge, push, and run
+`scripts/deploy.sh --force`. Both paths were rehearsed on staging.
+
+Why step 4b exists: v0.8.7 sometimes saves a streaming reply twice, as an
+`unfinished` placeholder and as the finished reply, under one `messageId`.
+v0.8.8 makes that key unique, and production had 34 such pairs. Users see the
+finished copy by default and the placeholder as a stray "1 / 2" version, so
+deleting the placeholder changes nothing they rely on. New pairs keep
+appearing until the upgrade, so run it in the window, not days ahead. The only
+way back is the backup from step 1; the script's audit trail in
+`$DATA_DIR/migrations/` lists what it deleted.
 
 Rehearse the whole sequence on a [staging copy](#a-note-on-staging) first.
 
