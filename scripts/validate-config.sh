@@ -428,6 +428,15 @@ if known_endpoint "$memory_provider" && model_served "$memory_provider" "$memory
 else
   fail "memory agent '$memory_provider' / '$memory_model' does not resolve — memory extraction would silently stop"
 fi
+summary_provider="$(yq -r '.summarization.provider // ""' librechat.yaml)"
+summary_model="$(yq -r '.summarization.model // ""' librechat.yaml)"
+if [ -z "$summary_provider$summary_model" ]; then
+  pass "summarization has no provider/model of its own (each chat summarizes itself)"
+elif known_endpoint "$summary_provider" && ! custom_hidden "$summary_provider" && model_served "$summary_provider" "$summary_model"; then
+  pass "summarization '$summary_provider' / '$summary_model' resolves"
+else
+  fail "summarization '$summary_provider' / '$summary_model' does not resolve to an offered model — long chats would lose history instead of summarizing it"
+fi
 
 # The retired custom endpoint keeps titleConvo: true while it still serves
 # unmigrated agents, for the same reason as above.

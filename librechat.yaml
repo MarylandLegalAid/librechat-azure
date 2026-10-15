@@ -454,6 +454,37 @@ memory:
     model: "gpt-6-luna"
 
 # =============================================================================
+# Summarization (UPGRADE_PLAN M8, M16)
+# =============================================================================
+# When the next prompt would exceed a chat's context budget, the older part of
+# the thread is summarized instead of dropped. The budget is the trigger: a
+# preset's maxContextTokens (Quick and Standard: 250,000, below GPT-6's 272K
+# price step), otherwise the model's window x 0.95. So there is no `trigger`
+# here: an earlier one only means more summaries and more loss, at no saving.
+#
+# One summarizer for every chat, the cheapest model we run. Left unset, each
+# chat would summarize itself, so a Deep chat would pay Opus at effort high for
+# housekeeping. For Claude chats this means the older part of the thread goes to
+# OpenAI to be summarized (both are covered providers; see docs/compliance.md).
+#
+# The effort is explicit because a summarizer on the chat's own provider
+# otherwise inherits the chat's effort. retainRecent keeps the last two
+# exchanges verbatim (upstream's default, written out). The prompts are
+# upstream's defaults, which already ask for names and identifiers verbatim.
+#
+# The current turn is never summarized: one message bigger than the budget on
+# Quick or Standard (a very long document) fails with a token-budget error.
+# Deep is the answer for that.
+summarization:
+  enabled: true
+  provider: "openAI"
+  model: "gpt-6-luna"
+  parameters:
+    reasoning_effort: "medium"
+  retainRecent:
+    turns: 2
+
+# =============================================================================
 # Web search
 # =============================================================================
 # Declared rather than auto-detected. Without this block LibreChat picks each
