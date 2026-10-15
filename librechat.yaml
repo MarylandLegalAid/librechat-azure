@@ -90,10 +90,13 @@ interface:
   # already defaults to true (unlike modelSelect/parameters/presets above,
   # it is NOT affected by modelSpecs.list) — pinned explicitly anyway so the
   # choice is visible in git rather than resting on an implicit default that
-  # could change in a future LibreChat release. contextCost (cost-in-$ display)
-  # deliberately left off/unset — not requested, and shows real dollar figures
-  # to end users, a separate decision.
+  # could change in a future LibreChat release.
   contextUsage: true
+  # The gauge also shows the conversation's cost in dollars, from LibreChat's
+  # own price table (tokenConfig / built-in prices). Checked against list
+  # prices for every model we offer, including GPT-6's >272K tier, before it
+  # was turned on (UPGRADE_PLAN Phase 3 step 8).
+  contextCost: true
   # "Run Code" button on Markdown code blocks — executes via the self-hosted
   # code interpreter on its own VM (it needs /dev/kvm, which is why it cannot
   # live in this Compose stack). See docs/modules/code-interpreter.md.
@@ -210,10 +213,11 @@ registration:
 # =============================================================================
 endpoints:
   agents:
-    # Pin the complete v0.8.7 default list explicitly so a future LibreChat
-    # default change cannot silently remove Execute Code. v0.8.8's default adds
-    # `memory` and `ask_user_question`; they are left out here on purpose so the
-    # platform upgrade changes nothing users see. UPGRADE_PLAN Phase 3 (F4).
+    # Pinned explicitly so a future LibreChat default change cannot silently
+    # remove Execute Code. This is v0.8.8's default list: `memory` gives agents
+    # a tool to read and write the user's memories on purpose (the background
+    # memory extraction under `memory:` works without it), and
+    # `ask_user_question` lets an agent stop and ask the user a question.
     capabilities:
       - "deferred_tools"
       - "execute_code"
@@ -224,6 +228,8 @@ endpoints:
       - "actions"
       - "context"
       - "skills"
+      - "memory"
+      - "ask_user_question"
       - "tools"
       - "chain"
       - "ocr"
@@ -399,6 +405,11 @@ speech:
 # to text and put in the prompt. (An empty `fileConfig:` key is YAML null and
 # v0.8.8 refuses to start on it.) Upload limits live in the admin panel's DB
 # override, not here.
+#
+# Know this: a native PDF or image is NOT counted against a preset's
+# maxContextTokens. Staging, 2026-10-15: a 40-page PDF (25.8K tokens at OpenAI,
+# 93K at Anthropic) went through a 20K cap and was resent on the next turn,
+# with no summary. So the caps bound text, not native attachments.
 #
 # There is deliberately no `fileConfig.stt` either. One existed and did
 # nothing: LibreChat's config schema has no fileConfig.stt and strips it
