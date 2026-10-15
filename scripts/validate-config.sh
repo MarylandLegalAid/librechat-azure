@@ -273,14 +273,43 @@ group "The approved model list agrees with what is actually configured"
 # from the models the application actually offers, the migration will happily
 # move agents onto a model nobody can select.
 
+# A custom endpoint is HIDDEN (retired) when nobody can choose it: there is a
+# modelSpecs list, the endpoint is not in modelSpecs.addedEndpoints, no spec
+# points at it, agents.allowedProviders exists and leaves it out, and the memory
+# agent does not use it. A hidden endpoint stays declared only so references
+# the migrations have not moved yet still resolve, so its models are not
+# "offered" and do not belong in the approved list.
+spec_count="$(yq -r '.modelSpecs.list | length' librechat.yaml 2>/dev/null)"
+allowed_providers_set="$(yq -r '.endpoints.agents | has("allowedProviders")' librechat.yaml 2>/dev/null)"
+memory_provider="$(yq -r '.memory.agent.provider // ""' librechat.yaml)"
+custom_hidden() {
+  local name="$1"
+  [ "${spec_count:-0}" -gt 0 ] || return 1
+  yaml_array_contains librechat.yaml '.modelSpecs.addedEndpoints' "$name" && return 1
+  yq -r '.modelSpecs.list[]?.preset.endpoint' librechat.yaml | grep -qxF "$name" && return 1
+  [ "$allowed_providers_set" = "true" ] || return 1
+  yaml_array_contains librechat.yaml '.endpoints.agents.allowedProviders' "$name" && return 1
+  [ "$memory_provider" != "$name" ] || return 1
+  return 0
+}
+
 approved="$(node -e "console.log(require('./scripts/lib/agent-model-migration.js').APPROVED_MODELS.join('\n'))" | sort)"
 configured="$(
   {
     grep '^ANTHROPIC_MODELS=' env.defaults | cut -d= -f2- | tr ',' '\n'
     grep '^OPENAI_MODELS='    env.defaults | cut -d= -f2- | tr ',' '\n'
-    yq -r '.endpoints.custom[]?.models.default[]?' librechat.yaml
+    for name in "${CUSTOM_ENDPOINTS[@]}"; do
+      custom_hidden "$name" && continue
+      yq -r ".endpoints.custom[] | select(.name == \"$name\") | .models.default[]?" librechat.yaml
+    done
   } | sed '/^$/d' | sort -u
 )"
+
+for name in "${CUSTOM_ENDPOINTS[@]}"; do
+  if custom_hidden "$name"; then
+    pass "custom endpoint '$name' is hidden (retired: not offered, kept for unmigrated references)"
+  fi
+done
 
 if [ "$approved" = "$configured" ]; then
   pass "approved list matches the configured models exactly"
@@ -290,41 +319,93 @@ else
   echo "      only in configuration:   $(comm -13 <(echo "$approved") <(echo "$configured") | tr '\n' ' ')"
 fi
 
-# The built-in openAI endpoint was DELETED on 2026-07-30 (see librechat.yaml).
-# Every OpenAI model now reaches users only through the custom endpoint, which
-# forces the Responses API. These three checks assert that state rather than the
-# weaker "GPT-5.6 is excluded from OPENAI_MODELS" one they replace — that check
-# became vacuous the moment OPENAI_MODELS stopped existing, and a check that
-# cannot fail is decoration.
-if grep -q '^OPENAI_MODELS=' env.defaults; then
-  fail "OPENAI_MODELS is set — the built-in openAI endpoint is retired and must stay retired; see docs/modules/models-gpt56-responses.md"
+# OpenAI models live on the built-in openAI endpoint (UPGRADE_PLAN M13/M14).
+# Tool use needs the Responses API, and v0.8.8 sends a model there on its own
+# only when it is GPT-6: upstream's GPT6_TIER pattern in
+# packages/data-provider (`prefersResponsesApiByModel`). Re-check the pattern at
+# every LibreChat upgrade. GPT-5.6 would reach Chat Completions here and fail on
+# reasoning plus tools at request time, so OPENAI_MODELS is GPT-6 only.
+GPT6_TIER='^gpt-6(\.[0-9]+)?-(astra|sol|luna)(-|$)'
+openai_models="$(grep '^OPENAI_MODELS=' env.defaults | cut -d= -f2-)"
+if [ -z "$openai_models" ]; then
+  # Unset or empty while OPENAI_API_KEY is set = OpenAI's whole catalog.
+  fail "OPENAI_MODELS is missing or empty — that allows OpenAI's entire catalog; list the GPT-6 models explicitly"
 else
-  pass "OPENAI_MODELS is absent (built-in openAI endpoint retired)"
+  while IFS= read -r model; do
+    [ -n "$model" ] || continue
+    if grep -qiE "$GPT6_TIER" <<< "$model"; then
+      pass "OPENAI_MODELS entry '$model' is GPT-6 (routed to the Responses API)"
+    else
+      fail "OPENAI_MODELS entry '$model' is not GPT-6 — v0.8.8 would send it to Chat Completions, where tool use can fail; see docs/modules/models-gpt56-responses.md"
+    fi
+  done < <(tr ',' '\n' <<< "$openai_models")
 fi
 
-if yq -e '.endpoints.openAI' librechat.yaml >/dev/null 2>&1; then
-  fail "librechat.yaml declares endpoints.openAI — the built-in endpoint is retired; it is a bypass route around the forced Responses API"
+if grep -qE '^ENDPOINTS=(.*,)?openAI(,|$)' env.defaults; then
+  pass "ENDPOINTS includes the built-in openAI endpoint"
 else
-  pass "librechat.yaml does not declare the built-in openAI endpoint"
+  fail "ENDPOINTS does not include openAI, but OpenAI models are configured there"
 fi
 
-if yaml_array_contains librechat.yaml '.modelSpecs.addedEndpoints' 'openAI'; then
-  fail "modelSpecs.addedEndpoints includes openAI — that lets a user bypass the forced Responses API route"
-else
-  pass "modelSpecs.addedEndpoints excludes the built-in openAI endpoint"
-fi
+# No user-reachable custom endpoint may point at first-party OpenAI. It would be
+# a second route to OpenAI models, outside OPENAI_MODELS and outside upstream's
+# GPT-6 routing. A hidden (retired) one is tolerated until it is deleted.
+for name in "${CUSTOM_ENDPOINTS[@]}"; do
+  base_url="$(yq -r ".endpoints.custom[] | select(.name == \"$name\") | .baseURL // \"\"" librechat.yaml)"
+  if grep -qiE '^https?://api\.openai\.com' <<< "$base_url"; then
+    if custom_hidden "$name"; then
+      pass "custom endpoint '$name' points at api.openai.com but is hidden (retired)"
+    else
+      fail "custom endpoint '$name' points at api.openai.com and is reachable — OpenAI models belong on the built-in openAI endpoint"
+    fi
+  fi
+done
 
-# titleConvo MUST be true on the custom endpoint. When it was false, every
-# conversation on every migrated agent was silently saved as "New Chat" —
+# titleConvo MUST be true on the endpoint agents use. When it was false, every
+# conversation on every agent was silently saved as "New Chat" —
 # agents/title.js early-returns on titleConvo === false with no fallback. Direct
 # chats titled fine throughout, so nothing in a normal smoke test caught it.
-title_convo="$(yq -r '.endpoints.custom[] | select(.name == "OpenAI GPT-5.6 Responses") | .titleConvo' librechat.yaml 2>/dev/null)"
+title_convo="$(yq -r '.endpoints.openAI.titleConvo' librechat.yaml 2>/dev/null)"
 if [ "$title_convo" = "true" ]; then
-  pass "custom endpoint has titleConvo: true (agents get conversation titles)"
+  pass "endpoints.openAI has titleConvo: true (agents get conversation titles)"
 else
-  fail "custom endpoint titleConvo is '${title_convo:-unset}', must be true — agent conversations will all be saved as \"New Chat\" with no error anywhere"
+  fail "endpoints.openAI titleConvo is '${title_convo:-unset}', must be true — agent conversations will all be saved as \"New Chat\" with no error anywhere"
 fi
 
+# The title and memory models must be ones their endpoint actually serves.
+# Neither failure is visible: titles silently stop, memory silently stops.
+anthropic_models="$(grep '^ANTHROPIC_MODELS=' env.defaults | cut -d= -f2-)"
+model_served() {
+  local provider="$1" model="$2"
+  case "$provider" in
+    openAI)    tr ',' '\n' <<< "$openai_models"    | grep -qxF "$model" ;;
+    anthropic) tr ',' '\n' <<< "$anthropic_models" | grep -qxF "$model" ;;
+    *)         yq -r ".endpoints.custom[] | select(.name == \"$provider\") | .models.default[]?" librechat.yaml | grep -qxF "$model" ;;
+  esac
+}
+title_model="$(yq -r '.endpoints.openAI.titleModel // ""' librechat.yaml)"
+if [ -n "$title_model" ] && model_served openAI "$title_model"; then
+  pass "endpoints.openAI.titleModel '$title_model' is in OPENAI_MODELS"
+else
+  fail "endpoints.openAI.titleModel '${title_model:-unset}' is not in OPENAI_MODELS — titles would silently stop"
+fi
+memory_model="$(yq -r '.memory.agent.model // ""' librechat.yaml)"
+if known_endpoint "$memory_provider" && model_served "$memory_provider" "$memory_model"; then
+  pass "memory agent '$memory_provider' / '$memory_model' resolves"
+else
+  fail "memory agent '$memory_provider' / '$memory_model' does not resolve — memory extraction would silently stop"
+fi
+
+# The retired custom endpoint keeps titleConvo: true while it still serves
+# unmigrated agents, for the same reason as above.
+for name in "${CUSTOM_ENDPOINTS[@]}"; do
+  tc="$(yq -r ".endpoints.custom[] | select(.name == \"$name\") | .titleConvo" librechat.yaml)"
+  if [ "$tc" = "true" ]; then
+    pass "custom endpoint '$name' has titleConvo: true"
+  else
+    fail "custom endpoint '$name' titleConvo is '${tc:-unset}', must be true while agents can still use it"
+  fi
+done
 
 # =============================================================================
 group "MCP overlays are self-consistent and match their Compose profiles"

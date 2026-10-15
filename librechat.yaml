@@ -240,57 +240,52 @@ endpoints:
       principalWorkers:
         enabled: false
 
-  # THE BUILT-IN openAI ENDPOINT IS DELIBERATELY ABSENT. Do not add it back.
-  #
-  # It used to be configured — not user-selectable, but present — purely to host
-  # two things: chat-title generation and the memory agent, both on gpt-5.4-nano,
-  # which was the only model it served. On 2026-07-30 OpenAI cut gpt-5.6-luna to
-  # roughly nano's price, nano was retired, and with nothing left for the built-in
-  # endpoint to do it was removed outright.
-  #
-  # That is a security improvement, not merely a tidy-up. §11.4's protection used
-  # to be three parts, one of which was "modelSpecs.addedEndpoints omits openAI so
-  # the built-in endpoint is not selectable and cannot be used to bypass the forced
-  # Responses route". An endpoint that does not exist cannot be bypassed to. The
-  # hazard is gone rather than hidden.
-  #
-  # Consequences, so nobody re-adds it by accident:
-  #   - OPENAI_MODELS no longer exists in env.defaults.
-  #   - titleModel and the memory agent now live on the custom endpoint below.
-  #   - Every OpenAI model in this deployment is therefore forced through the
-  #     Responses API, with no exceptions and no second route.
-  #
+    # The providers the Agent Builder offers, and the only ones an agent may
+    # use. An explicit allowlist rather than the default (every endpoint): it
+    # is what keeps the retired custom endpoint below out of the Builder.
+    allowedProviders:
+      - openAI
+      - anthropic
+
   # ---------------------------------------------------------------------------
-  # GPT-5.6 and the Responses API — read before changing anything below.
+  # The built-in openAI endpoint: GPT-6. The models are OPENAI_MODELS in
+  # env.defaults.
   # ---------------------------------------------------------------------------
-  # The GPT-5.6 family REJECTS requests that combine reasoning with function
-  # tools on /v1/chat/completions. LibreChat's built-in openAI endpoint uses chat
-  # completions by default, so GPT-5.6 breaks there exactly when tools are in
-  # play — which is most of what an agent does.
-  #
-  # In v0.8.7, useResponsesApi is auto-enabled ONLY when web search is on
-  # (packages/api/src/endpoints/openai/llm.ts). There is no model-name-based
-  # detection, so upgrading LibreChat does not fix this for you.
-  #
-  # The fix is three parts that only work together. Removing any one of them
-  # silently reintroduces the bug, and it fails at request time rather than at
-  # startup, so nothing will tell you:
-  #
-  #   1. THIS custom endpoint, whose server-side addParams forces the Responses
-  #      API even if a client submits useResponsesApi: false.
-  #   2. GPT-5.6 models excluded from OPENAI_MODELS, so the built-in endpoint
-  #      cannot serve them at all.
-  #   3. modelSpecs.addedEndpoints omitting openAI, so the built-in endpoint is
-  #      not selectable in the UI and cannot be used to bypass the forced route.
-  #
-  # Agents reach these models by pointing `provider` at this endpoint's `name`
-  # BYTE FOR BYTE, spaces included — "OpenAI GPT-5.6 Responses". LibreChat
-  # resolves a non-built-in provider through getCustomEndpointConfig, so
-  # addParams applies to agent runs. That makes the routing server-enforced
-  # policy rather than per-agent state a user could turn off.
-  #
-  # Full explanation: docs/modules/models-gpt56-responses.md
+  # Tool use on these models needs the Responses API. v0.8.8 routes every GPT-6
+  # model there on its own whenever useResponsesApi is unset
+  # (packages/api/src/endpoints/openai/llm.ts, `prefersResponsesApiByModel`).
+  # Re-check that rule at every LibreChat upgrade. What it does not cover: a
+  # conversation, preset or agent that stores useResponsesApi: false keeps Chat
+  # Completions, and tools then fail for that user. The built-in endpoint takes
+  # no addParams, so nothing here can force it. The model migrations clear
+  # stored `false` values, and validate-config.sh keeps OPENAI_MODELS to GPT-6.
+  # Full story: docs/modules/models-gpt56-responses.md
+  openAI:
+    # titleConvo MUST stay true. Agent conversations get no title at all when
+    # it is false (api/server/services/Endpoints/agents/title.js returns early,
+    # with no fallback), while direct chats keep titling, so a smoke test of
+    # direct chats does not catch it. validate-config.sh asserts it.
+    titleConvo: true
+    titleModel: "gpt-6-luna"
+
   # ---------------------------------------------------------------------------
+  # RETIRED: the custom "OpenAI GPT-5.6 Responses" endpoint.
+  # ---------------------------------------------------------------------------
+  # It existed because v0.8.7 sent GPT-5.6 to Chat Completions, where reasoning
+  # plus tools fails; its addParams forced the Responses API. v0.8.8 does that
+  # for GPT-6 itself (above), so the endpoint is being retired in two steps
+  # (UPGRADE_PLAN Phase 3 step 2):
+  #
+  #   A. now: kept, but hidden. It is not in modelSpecs.addedEndpoints, not in
+  #      agents.allowedProviders, and no spec points at it, so nobody can choose
+  #      it. Its models stay the GPT-5.6 ones, so a conversation or agent the
+  #      migrations have not moved yet still resolves instead of failing.
+  #   B. after a clean watch period: delete this block, once a query shows
+  #      nothing references the name. Old messages keep the name and show a
+  #      generic icon; John accepted that on 2026-10-15.
+  #
+  # The admin panel's DB override (configs, role __base__) carries a copy of this
+  # definition too. Step B removes it there as well.
   custom:
     - name: "OpenAI GPT-5.6 Responses"
       apiKey: "${OPENAI_API_KEY}"
@@ -324,43 +319,63 @@ endpoints:
 # =============================================================================
 # Model specs
 # =============================================================================
-# Makes gpt-5.6-terra the default model for a user's first-ever new chat, without
-# forcing it on every subsequent new chat. softDefault (not default:true) is what
-# gives that behavior: default:true would re-select gpt-5.6-terra on every new
-# chat regardless of what the user last used; softDefault only fires until the
-# user picks a different model/spec/agent, at which point LibreChat's own
-# "last conversation setup" memory carries that choice forward for future new
-# chats — nothing else to configure for the "remember their choice" half of this.
-# addedEndpoints (+ interface.modelSelect above) keeps the normal anthropic and
-# agents choices available alongside these pinned specs.
+# Three presets above the raw model selector. Standard is the softDefault: a
+# user's first-ever new chat uses it, and after that LibreChat remembers their
+# last choice. default:true would instead re-select it on every new chat.
+#
+# addedEndpoints keeps the raw built-in endpoints selectable alongside the
+# presets. It must never list the retired custom endpoint, and no preset may
+# point at it (validate-config.sh checks both).
+#
+# maxContextTokens 250000 on the GPT-6 presets keeps every prompt below the
+# 272K tier where GPT-6 prices double; summarization (below) makes the cap
+# summarize older history instead of dropping it. Deep has no cap: Opus 5.5 is
+# priced flat across its window.
 modelSpecs:
-  # Do not add the built-in openAI endpoint here: it would expose GPT-5.6
-  # through a selectable route that does not force the Responses API in v0.8.7.
-  # The built-in endpoint remains configured for title/summary generation and
-  # Agents; ordinary GPT-5.6 chats use only the forced custom endpoint above.
   addedEndpoints:
+    - openAI
     - anthropic
     - agents
   list:
-    - name: "gpt-5.6-luna"
-      label: "GPT-5.6 Luna"
+    - name: "quick"
+      label: "Quick"
+      description: "Fast and inexpensive — everyday questions, short drafting, quick summaries."
+      group: "MLAGPT Presets"
+      groupIcon: "/assets/logo.svg"
+      fileSearch: true
+      executeCode: true
       preset:
-        endpoint: "OpenAI GPT-5.6 Responses"
-        model: "gpt-5.6-luna"
+        endpoint: "openAI"
+        model: "gpt-6-luna"
+        reasoning_effort: "medium"
         useResponsesApi: true
-    - name: "gpt-5.6-terra"
-      label: "GPT-5.6 Terra"
+        maxContextTokens: 250000
+    - name: "standard"
+      label: "Standard"
+      description: "Balanced — most legal and administrative work."
+      group: "MLAGPT Presets"
+      groupIcon: "/assets/logo.svg"
       softDefault: true
+      fileSearch: true
+      executeCode: true
       preset:
-        endpoint: "OpenAI GPT-5.6 Responses"
-        model: "gpt-5.6-terra"
+        endpoint: "openAI"
+        model: "gpt-6.1-sol"
+        reasoning_effort: "medium"
         useResponsesApi: true
-    - name: "gpt-5.6-sol"
-      label: "GPT-5.6 Sol"
+        maxContextTokens: 250000
+    - name: "deep"
+      label: "Deep"
+      description: "Most capable — complex analysis, long documents, careful reasoning. Slower and costs more."
+      group: "MLAGPT Presets"
+      groupIcon: "/assets/logo.svg"
+      fileSearch: true
+      executeCode: true
       preset:
-        endpoint: "OpenAI GPT-5.6 Responses"
-        model: "gpt-5.6-sol"
-        useResponsesApi: true
+        endpoint: "anthropic"
+        model: "claude-opus-5-5"
+        # Opus 5.5 defaults to medium.
+        effort: "high"
 
 # =============================================================================
 # Speech to text
@@ -417,30 +432,25 @@ fileConfig:
 # =============================================================================
 # Memory (personalization)
 # =============================================================================
-# Runs on the custom GPT-5.6 endpoint. It used to run on the built-in openAI
-# endpoint with gpt-5.4-nano; both were retired on 2026-07-30 (see the endpoints
-# section above), so the memory agent moved here with everything else.
+# Runs on GPT-6 Luna on the built-in openAI endpoint, the same model that
+# titles chats: the cheapest one this deployment offers.
 #
-# ⚠️  The provider string must match endpoints.custom[].name BYTE FOR BYTE. Unlike
-# an agent, a broken memory provider does not produce an obvious failure — memory
-# extraction simply stops happening, and personalization quietly degrades with no
-# error surfaced to anyone. Verify it after any change to the endpoint name.
+# ⚠️  A broken memory provider does not produce an obvious failure. Unlike an
+# agent, memory extraction simply stops, and personalization quietly degrades
+# with no error surfaced to anyone. The provider must be a built-in endpoint
+# name and the model must be in that endpoint's list; validate-config.sh checks
+# both. Verify a new memory entry appears after any change here.
 #
 # ⚠️  `enabled: true` is REQUIRED, and its absence fails just as silently. From
 # v0.8.7, automatic memory extraction is opt-in: without it LibreChat logs one
 # warning at startup and never extracts again. That is exactly what happened
 # here: memory stopped at the August 2026 cutover and nobody noticed for ten
 # weeks. Check `memoryentries` for recent `updated_at` values after any upgrade.
-#
-# GPT-6 Luna rather than GPT-5.6 Luna: cheaper ($0.10/$0.50 vs $0.20/$1.20) and
-# the successor the rest of the deployment is moving to. It goes through the
-# custom endpoint for now because that endpoint forces the Responses API, which
-# the memory agent's tool calls need on v0.8.7.
 memory:
   tokenLimit: 3000
   agent:
     enabled: true
-    provider: "OpenAI GPT-5.6 Responses"
+    provider: "openAI"
     model: "gpt-6-luna"
 
 # =============================================================================
