@@ -92,16 +92,16 @@ interface:
   # choice is visible in git rather than resting on an implicit default that
   # could change in a future LibreChat release.
   contextUsage: true
-  # The dollar figure stays OFF: it would be wrong. v0.8.8 prices every Claude
-  # cache write at the 5-minute rate (1.25x input), but its agents SDK sends
-  # the 1-hour cache by default, billed at 2x ($8/M on Opus 5.5, not $5). On
-  # staging (2026-10-15) a Deep thread showed $0.048 for $0.061 of real cost,
-  # and Claude spend overall read 15-30% low. It also prices gpt-6.1-sol as
-  # gpt-6-sol (cache reads at $0.20/M instead of $0.10/M). Built-in endpoints
-  # take no price overrides (tokenConfig is custom-endpoint only), so there
-  # is nothing to correct here. Revisit after an upstream release prices the
-  # cache TTL. (UPGRADE_PLAN Phase 3 step 8.)
-  contextCost: false
+  # The dollar figure in the gauge is ON, knowing it is approximate (John,
+  # 2026-10-15: it still gives people a relative sense of cost). Known errors,
+  # measured on staging that day: v0.8.8 prices every Claude cache write at the
+  # 5-minute rate (1.25x input), but its agents SDK sends the 1-hour cache,
+  # billed at 2x ($8/M on Opus 5.5, not $5), so Claude threads read 15-30% low
+  # (a Deep thread showed $0.048 for $0.061). gpt-6.1-sol is priced as
+  # gpt-6-sol, so its cache reads count double ($0.20/M, not $0.10/M); GPT-6
+  # Luna is exact. Built-in endpoints take no price overrides (tokenConfig is
+  # custom-endpoint only). Revisit after an upstream release prices the TTL.
+  contextCost: true
   # "Run Code" button on Markdown code blocks — executes via the self-hosted
   # code interpreter on its own VM (it needs /dev/kvm, which is why it cannot
   # live in this Compose stack). See docs/modules/code-interpreter.md.
