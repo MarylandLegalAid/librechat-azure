@@ -8,13 +8,12 @@ at, which needs a migration.
 `env.defaults`:
 
 ```
-ANTHROPIC_MODELS=claude-opus-4-8,claude-sonnet-5,claude-haiku-4-5
+ANTHROPIC_MODELS=claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5
+OPENAI_MODELS=gpt-6-luna,gpt-6.1-sol
 ```
 
-There is no `OPENAI_MODELS`. The built-in `openAI` endpoint was retired on
-2026-07-30, so OpenAI models are listed on the custom endpoint in
-`librechat.yaml` instead — see
-[GPT-5.6 and the Responses API](models-gpt56-responses.md).
+Both are allowlists: the server refuses any model that is not listed, including in
+requests the menu would never produce.
 
 Add the identifier, commit, push. It appears in every user's dropdown within five
 minutes.
@@ -28,11 +27,18 @@ Two things to check first:
    real family of models that break in a specific way on the default endpoint, and
    the pattern for handling any model with its own API requirements.
 
-!!! warning "Do not reintroduce `OPENAI_MODELS`"
-    Setting it resurrects the built-in `openAI` endpoint, which does not force the
-    Responses API — reintroducing a bug that only appears when a tool is used. OpenAI
-    models belong on the custom endpoint in `librechat.yaml`. `validate-config.sh`
-    fails the build if `OPENAI_MODELS` reappears. Read the page above first.
+!!! warning "`OPENAI_MODELS` holds GPT-6 models only, and is never empty"
+    OpenAI models with tools need the Responses API. LibreChat v0.8.8 sends a model
+    there by itself only when it is GPT-6 (`gpt-6…-astra`, `-sol` or `-luna`); any
+    other OpenAI model goes to Chat Completions, where GPT-5.6, for one, fails as soon
+    as a tool is used. `validate-config.sh` fails the build on a non-GPT-6 entry.
+
+    Empty is worse. With `OPENAI_API_KEY` set, an unset or empty `OPENAI_MODELS`
+    allows OpenAI's whole catalog, including models priced far above anything you
+    chose. The build fails on that too.
+
+    One case the routing doesn't cover: a conversation, preset or agent that stores
+    `useResponsesApi: false` keeps Chat Completions. The migrations below clear it.
 
 ## Retiring a model
 
@@ -82,8 +88,8 @@ configuration. Moving a conversation changes only the model its next turn uses.
 
 ```json
 {
-  "gpt-5.2": { "model": "gpt-5.6-terra", "provider": "OpenAI GPT-5.6 Responses" },
-  "gpt-4.1": { "model": "gpt-5.6-luna",  "provider": "OpenAI GPT-5.6 Responses" }
+  "gpt-5.6-sol":     { "model": "gpt-6.1-sol",     "provider": "openAI" },
+  "claude-opus-4-8": { "model": "claude-opus-5-5", "provider": "anthropic" }
 }
 ```
 
@@ -161,8 +167,8 @@ The migration runs these itself, but they are worth knowing:
 db.agents.aggregate([
   { $group: { _id: "$model", n: { $sum: 1 } } },
   { $match: { _id: { $nin: [
-      "claude-opus-4-8","claude-sonnet-5","claude-haiku-4-5",
-      "gpt-5.6-sol","gpt-5.6-terra","gpt-5.6-luna" ] } } }
+      "claude-opus-5-5","claude-sonnet-5-5","claude-haiku-5-5",
+      "gpt-6.1-sol","gpt-6-luna" ] } } }
 ])
 
 // and none hiding in version history
@@ -183,14 +189,14 @@ so it looks like a conversation the UI would have created on that model:
 
 ```json
 "targets": {
-  "gpt-5.6-luna": {
-    "endpoint": "OpenAI GPT-5.6 Responses", "endpointType": "custom",
-    "model": "gpt-5.6-luna", "spec": "gpt-5.6-luna",
-    "useResponsesApi": true, "maxContextTokens": 380000
+  "gpt-6-luna": {
+    "endpoint": "openAI", "endpointType": null,
+    "model": "gpt-6-luna", "spec": "quick",
+    "useResponsesApi": true, "maxContextTokens": 250000
   }
 },
 "sources": {
-  "openAI": { "keep": [], "map": { "gpt-4.1": "gpt-5.6-luna" } }
+  "openAI": { "keep": ["gpt-6-luna", "gpt-6.1-sol"], "map": { "gpt-4.1": "gpt-6-luna" } }
 }
 ```
 
@@ -237,6 +243,6 @@ These are not chat models and are not part of a model refresh.
     Changing it is a project with a re-embedding step, not a line edit.
 
 The title and memory models are worth revisiting whenever a cheaper-and-comparable
-model ships. That is exactly the swap the cheap tiers exist for. Both run on the
-built-in `openAI` endpoint, which is one of the two reasons that endpoint stays
-configured even though it is not user-selectable.
+model ships. That is exactly the swap the cheap tiers exist for. Both must be
+models their endpoint lists, or they stop without an error; `validate-config.sh`
+checks it.

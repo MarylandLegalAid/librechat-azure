@@ -26,52 +26,91 @@
     "They move to the GPT-5.6 custom endpoint, so the OPENAI_MODELS allowlist can",
     "then shrink. Conversations on retired Claude models already fail to continue",
     "(the anthropic list is enforced), so they move to their successors in the",
-    "same pass. Phase 3 replaces this table with the GPT-6 one."
+    "same pass. Phase 3 replaces this table with the GPT-6 one.",
+    "",
+    "2026-10-15 (UPGRADE_PLAN Phase 3, M13/M15): the GPT-6 table. Every",
+    "conversation on the retired custom endpoint, and any left on the built-in",
+    "openAI endpoint on an older model, moves to the built-in openAI endpoint on",
+    "GPT-6. endpointType goes (built-in conversations have none). The spec is the",
+    "preset of the same model, as if the user had picked it: Luna -> quick, Sol ->",
+    "standard. maxContextTokens is those presets' 250000, below the 272K tier",
+    "where GPT-6 prices double; the old 380000 would cross it. useResponsesApi is",
+    "set true, which also clears any stored false (M14). Claude conversations go",
+    "to the 5.5 model of the same family, on the raw selector (no spec)."
   ],
-
   "targets": {
-    "gpt-5.6-sol": {
-      "endpoint": "OpenAI GPT-5.6 Responses",
-      "endpointType": "custom",
-      "model": "gpt-5.6-sol",
-      "spec": "gpt-5.6-sol",
+    "gpt-6-luna": {
+      "endpoint": "openAI",
+      "endpointType": null,
+      "model": "gpt-6-luna",
+      "spec": "quick",
       "useResponsesApi": true,
-      "maxContextTokens": 380000
+      "maxContextTokens": 250000
     },
-    "gpt-5.6-luna": {
-      "endpoint": "OpenAI GPT-5.6 Responses",
-      "endpointType": "custom",
-      "model": "gpt-5.6-luna",
-      "spec": "gpt-5.6-luna",
+    "gpt-6.1-sol": {
+      "endpoint": "openAI",
+      "endpointType": null,
+      "model": "gpt-6.1-sol",
+      "spec": "standard",
       "useResponsesApi": true,
-      "maxContextTokens": 380000
+      "maxContextTokens": 250000
     },
-    "claude-opus-4-8": { "endpoint": "anthropic", "model": "claude-opus-4-8" },
-    "claude-sonnet-5": { "endpoint": "anthropic", "model": "claude-sonnet-5" }
+    "claude-opus-5-5": {
+      "endpoint": "anthropic",
+      "model": "claude-opus-5-5"
+    },
+    "claude-sonnet-5-5": {
+      "endpoint": "anthropic",
+      "model": "claude-sonnet-5-5"
+    },
+    "claude-haiku-5-5": {
+      "endpoint": "anthropic",
+      "model": "claude-haiku-5-5"
+    }
   },
-
   "sources": {
-    "openAI": {
+    "OpenAI GPT-5.6 Responses": {
       "keep": [],
       "map": {
-        "gpt-5.5": "gpt-5.6-sol",
-        "gpt-5.4": "gpt-5.6-sol",
-        "gpt-5.2": "gpt-5.6-luna",
-        "gpt-4.1": "gpt-5.6-luna",
-        "gpt-5.1": "gpt-5.6-luna",
-        "gpt-5-mini": "gpt-5.6-luna",
-        "gpt-5.4-mini": "gpt-5.6-luna",
-        "gpt-5-nano": "gpt-5.6-luna"
+        "gpt-5.6-luna": "gpt-6-luna",
+        "gpt-5.6-terra": "gpt-6.1-sol",
+        "gpt-5.6-sol": "gpt-6.1-sol"
+      }
+    },
+    "openAI": {
+      "keep": [
+        "gpt-6-luna",
+        "gpt-6.1-sol"
+      ],
+      "map": {
+        "gpt-5.6-luna": "gpt-6-luna",
+        "gpt-5.6-terra": "gpt-6.1-sol",
+        "gpt-5.6-sol": "gpt-6.1-sol",
+        "gpt-5.5": "gpt-6.1-sol",
+        "gpt-5.4": "gpt-6.1-sol",
+        "gpt-5.2": "gpt-6-luna",
+        "gpt-4.1": "gpt-6-luna",
+        "gpt-5.1": "gpt-6-luna",
+        "gpt-5-mini": "gpt-6-luna",
+        "gpt-5.4-mini": "gpt-6-luna",
+        "gpt-5-nano": "gpt-6-luna"
       }
     },
     "anthropic": {
-      "keep": ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"],
+      "keep": [
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5"
+      ],
       "map": {
-        "claude-opus-5": "claude-opus-4-8",
-        "claude-opus-4-7": "claude-opus-4-8",
-        "claude-opus-4-5": "claude-opus-4-8",
-        "claude-sonnet-4-6": "claude-sonnet-5",
-        "claude-sonnet-4-5": "claude-sonnet-5"
+        "claude-opus-4-8": "claude-opus-5-5",
+        "claude-opus-5": "claude-opus-5-5",
+        "claude-opus-4-7": "claude-opus-5-5",
+        "claude-opus-4-5": "claude-opus-5-5",
+        "claude-sonnet-5": "claude-sonnet-5-5",
+        "claude-sonnet-4-6": "claude-sonnet-5-5",
+        "claude-sonnet-4-5": "claude-sonnet-5-5",
+        "claude-haiku-4-5": "claude-haiku-5-5"
       }
     }
   }

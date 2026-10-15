@@ -35,6 +35,10 @@ const MAP = parseModelMap(RAW_MAP);
 
 const OPTS = { map: MAP, approved: APPROVED_MODELS };
 
+// The retired custom endpoint. Phase 3 moves every agent on it to the built-in
+// openAI provider (UPGRADE_PLAN M13).
+const CUSTOM = 'OpenAI GPT-5.6 Responses';
+
 const agent = (overrides) =>
   Object.assign({ id: 'agent_x', name: 'Test Agent', provider: 'openAI', versions: [] }, overrides);
 
@@ -66,7 +70,7 @@ test('validateModelMap rejects a target that is not approved', () => {
 });
 
 test('validateModelMap rejects an approved model used as a migration source', () => {
-  const bad = { 'claude-haiku-4-5': { model: 'gpt-5.6-luna', provider: 'openAI' } };
+  const bad = { 'claude-haiku-5-5': { model: 'gpt-6-luna', provider: 'openAI' } };
   const problems = validateModelMap(bad, APPROVED_MODELS);
   assert.strictEqual(problems.length, 1);
   assert.match(problems[0], /must not also be a migration source/);
@@ -74,7 +78,7 @@ test('validateModelMap rejects an approved model used as a migration source', ()
 
 test('parseModelMap rejects an entry missing its provider', () => {
   assert.throws(
-    () => parseModelMap({ 'gpt-old': { model: 'gpt-5.6-luna' } }),
+    () => parseModelMap({ 'gpt-old': { model: 'gpt-6-luna' } }),
     /must have both a "model" and a "provider"/,
   );
 });
@@ -85,7 +89,7 @@ test('parseModelMap rejects an entry missing its provider', () => {
 
 test('an agent already on an approved model is left completely alone', () => {
   const plan = planAgentChanges(
-    agent({ model: 'claude-haiku-4-5', provider: 'anthropic' }),
+    agent({ model: 'claude-haiku-5-5', provider: 'anthropic' }),
     OPTS,
   );
   assert.strictEqual(plan.skipped, true);
@@ -103,12 +107,13 @@ test('retiring gpt-5.4-nano turns its five agents into ordinary migration target
     OPTS,
   );
   assert.strictEqual(plan.skipped, false);
-  assert.strictEqual(plan.set.model, 'gpt-5.6-luna');
-  assert.strictEqual(plan.set.provider, 'OpenAI GPT-5.6 Responses');
-  // History moves too, or a revert puts the agent back on a retired model served
-  // by an endpoint that no longer exists.
-  assert.strictEqual(plan.set['versions.0.model'], 'gpt-5.6-luna');
-  assert.strictEqual(plan.set['versions.0.provider'], 'OpenAI GPT-5.6 Responses');
+  assert.strictEqual(plan.set.model, 'gpt-6-luna');
+  // Since Phase 3 its successor is on the built-in openAI endpoint again, so
+  // the provider stays as it was and is not written.
+  assert.ok(!('provider' in plan.set));
+  // History moves too, or a revert puts the agent back on a retired model.
+  assert.strictEqual(plan.set['versions.0.model'], 'gpt-6-luna');
+  assert.ok(!('versions.0.provider' in plan.set));
   assert.deepStrictEqual(plan.warnings, []);
 });
 
@@ -119,9 +124,9 @@ test('an approved-model agent still has its history repaired, top level untouche
   // click away from a model that no longer exists.
   const plan = planAgentChanges(
     agent({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       provider: 'anthropic',
-      versions: [{ model: 'gpt-5.2', provider: 'openAI' }, { model: 'claude-haiku-4-5' }],
+      versions: [{ model: 'gpt-5.6-terra', provider: CUSTOM }, { model: 'claude-haiku-5-5' }],
     }),
     OPTS,
   );
@@ -136,17 +141,17 @@ test('an approved-model agent still has its history repaired, top level untouche
   assert.ok(!plan.changes.some((c) => c.field === 'model' || c.field === 'provider'));
 
   // The stale snapshot is repaired, and the approved one is left alone.
-  assert.strictEqual(plan.set['versions.0.model'], 'gpt-5.6-terra');
-  assert.strictEqual(plan.set['versions.0.provider'], 'OpenAI GPT-5.6 Responses');
+  assert.strictEqual(plan.set['versions.0.model'], 'gpt-6.1-sol');
+  assert.strictEqual(plan.set['versions.0.provider'], 'openAI');
   assert.ok(!('versions.1.model' in plan.set), 'an approved snapshot is not rewritten');
 });
 
 test('an approved-model agent with clean history is skipped entirely', () => {
   const plan = planAgentChanges(
     agent({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       provider: 'anthropic',
-      versions: [{ model: 'claude-haiku-4-5', provider: 'anthropic' }],
+      versions: [{ model: 'claude-haiku-5-5', provider: 'anthropic' }],
     }),
     OPTS,
   );
@@ -159,19 +164,25 @@ test('an approved-model agent with clean history is skipped entirely', () => {
 /* Rewriting model and provider together                                     */
 /* ------------------------------------------------------------------------- */
 
-test('a GPT-5.6 target rewrites both model and provider', () => {
-  const plan = planAgentChanges(agent({ model: 'gpt-5.2', provider: 'openAI' }), OPTS);
+test('a GPT-5.6 agent on the retired endpoint moves model and provider', () => {
+  const plan = planAgentChanges(agent({ model: 'gpt-5.6-terra', provider: CUSTOM }), OPTS);
 
   assert.strictEqual(plan.skipped, false);
-  assert.strictEqual(plan.set.model, 'gpt-5.6-terra');
-  assert.strictEqual(plan.set.provider, 'OpenAI GPT-5.6 Responses');
+  assert.strictEqual(plan.set.model, 'gpt-6.1-sol');
+  assert.strictEqual(plan.set.provider, 'openAI');
 });
 
-test('the provider string matches the custom endpoint name byte for byte', () => {
+test('the target provider is the built-in endpoint name, byte for byte', () => {
   // A mismatch here fails at request time, not at startup, so no test that only
   // checks "a provider was set" would catch it.
-  const plan = planAgentChanges(agent({ model: 'gpt-4.1', provider: 'openAI' }), OPTS);
-  assert.strictEqual(plan.set.provider, 'OpenAI GPT-5.6 Responses');
+  const plan = planAgentChanges(agent({ model: 'gpt-5.6-sol', provider: CUSTOM }), OPTS);
+  assert.strictEqual(plan.set.provider, 'openAI');
+});
+
+test('an old OpenAI model already on the built-in provider changes model only', () => {
+  const plan = planAgentChanges(agent({ model: 'gpt-5.2', provider: 'openAI' }), OPTS);
+  assert.strictEqual(plan.set.model, 'gpt-6.1-sol');
+  assert.ok(!('provider' in plan.set));
 });
 
 test('an Opus 5 agent changes model but keeps its Anthropic provider', () => {
@@ -179,7 +190,7 @@ test('an Opus 5 agent changes model but keeps its Anthropic provider', () => {
     agent({ model: 'claude-opus-5', provider: 'anthropic' }),
     OPTS,
   );
-  assert.strictEqual(plan.set.model, 'claude-opus-4-8');
+  assert.strictEqual(plan.set.model, 'claude-opus-5-5');
   assert.ok(!Object.prototype.hasOwnProperty.call(plan.set, 'provider'));
   assert.strictEqual(plan.changes.length, 1);
 });
@@ -191,20 +202,20 @@ test('an Opus 5 agent changes model but keeps its Anthropic provider', () => {
 test('every version entry is rewritten, not just the current model', () => {
   const plan = planAgentChanges(
     agent({
-      model: 'gpt-5.2',
-      provider: 'openAI',
+      model: 'gpt-5.6-luna',
+      provider: CUSTOM,
       versions: [
-        { model: 'gpt-4.1', provider: 'openAI' },
-        { model: 'gpt-5.2', provider: 'openAI' },
+        { model: 'gpt-5.6-luna', provider: CUSTOM },
+        { model: 'gpt-5.6-terra', provider: CUSTOM },
       ],
     }),
     OPTS,
   );
 
-  assert.strictEqual(plan.set['versions.0.model'], 'gpt-5.6-luna');
-  assert.strictEqual(plan.set['versions.0.provider'], 'OpenAI GPT-5.6 Responses');
-  assert.strictEqual(plan.set['versions.1.model'], 'gpt-5.6-terra');
-  assert.strictEqual(plan.set['versions.1.provider'], 'OpenAI GPT-5.6 Responses');
+  assert.strictEqual(plan.set['versions.0.model'], 'gpt-6-luna');
+  assert.strictEqual(plan.set['versions.0.provider'], 'openAI');
+  assert.strictEqual(plan.set['versions.1.model'], 'gpt-6.1-sol');
+  assert.strictEqual(plan.set['versions.1.provider'], 'openAI');
 });
 
 test('each version is mapped by its own model, not the agent current one', () => {
@@ -212,14 +223,14 @@ test('each version is mapped by its own model, not the agent current one', () =>
   // successor of whatever the agent happens to point at today.
   const plan = planAgentChanges(
     agent({
-      model: 'gpt-5.2', // -> terra
+      model: 'gpt-5.2', // -> gpt-6.1-sol
       provider: 'openAI',
-      versions: [{ model: 'gpt-5.4-mini', provider: 'openAI' }], // -> luna, not terra
+      versions: [{ model: 'gpt-5.4-mini', provider: 'openAI' }], // -> gpt-6-luna, not sol
     }),
     OPTS,
   );
-  assert.strictEqual(plan.set.model, 'gpt-5.6-terra');
-  assert.strictEqual(plan.set['versions.0.model'], 'gpt-5.6-luna');
+  assert.strictEqual(plan.set.model, 'gpt-6.1-sol');
+  assert.strictEqual(plan.set['versions.0.model'], 'gpt-6-luna');
 });
 
 test('version entries already on an approved model are not rewritten', () => {
@@ -227,7 +238,7 @@ test('version entries already on an approved model are not rewritten', () => {
     agent({
       model: 'gpt-5.2',
       provider: 'openAI',
-      versions: [{ model: 'gpt-5.6-luna', provider: 'OpenAI GPT-5.6 Responses' }],
+      versions: [{ model: 'gpt-6-luna', provider: 'openAI' }],
     }),
     OPTS,
   );
@@ -239,21 +250,21 @@ test('a version entry with no model at all is skipped without error', () => {
     agent({ model: 'gpt-5.2', provider: 'openAI', versions: [{ instructions: 'hello' }, null] }),
     OPTS,
   );
-  assert.strictEqual(plan.set.model, 'gpt-5.6-terra');
+  assert.strictEqual(plan.set.model, 'gpt-6.1-sol');
 });
 
 test('a 46-version agent produces writes for every version', () => {
-  // The real sample agent on production carried 46 versions. This is the bulk
-  // of the write volume, not an edge case.
+  // The real sample agent on production carried 46 versions (51 by 2026-10).
+  // This is the bulk of the write volume, not an edge case.
   const versions = [];
   for (let i = 0; i < 46; i += 1) {
-    versions.push({ model: 'gpt-4.1', provider: 'openAI' });
+    versions.push({ model: 'gpt-5.6-luna', provider: CUSTOM });
   }
-  const plan = planAgentChanges(agent({ model: 'gpt-4.1', provider: 'openAI', versions }), OPTS);
+  const plan = planAgentChanges(agent({ model: 'gpt-5.6-luna', provider: CUSTOM, versions }), OPTS);
 
   // 2 top-level fields + 46 versions x 2 fields
   assert.strictEqual(plan.changes.length, 2 + 46 * 2);
-  assert.strictEqual(plan.set['versions.45.model'], 'gpt-5.6-luna');
+  assert.strictEqual(plan.set['versions.45.model'], 'gpt-6-luna');
 });
 
 /* ------------------------------------------------------------------------- */
@@ -324,7 +335,10 @@ test('the error names the agent so it can be found', () => {
 /* ------------------------------------------------------------------------- */
 
 test('the production distribution produces exactly the expected plan', () => {
-  // 24 agents, matching the counts recorded during recon on 2026-07-29.
+  // 35 agents, matching production on 2026-10-15 (counted on the staging copy
+  // restored that morning). The 2026-07-29 fleet this test used to hold was
+  // migrated onto GPT-5.6 and Opus 4.8 that summer, so the Phase 3 dry run starts
+  // from here.
   const fleet = [];
   const push = (n, model, provider) => {
     for (let i = 0; i < n; i += 1) {
@@ -332,54 +346,47 @@ test('the production distribution produces exactly the expected plan', () => {
     }
   };
 
-  push(5, 'gpt-5.4-nano', 'openAI');
-  push(5, 'gpt-5.4-mini', 'openAI');
-  push(4, 'gpt-5.2', 'openAI');
-  push(3, 'gpt-4.1', 'openAI');
-  push(2, 'claude-opus-4-7', 'anthropic');
-  push(1, 'gpt-5.5', 'openAI');
-  push(1, 'gpt-5.4', 'openAI');
-  push(1, 'gpt-5-mini', 'openAI');
-  push(1, 'claude-opus-4-5', 'anthropic');
-  push(1, 'claude-haiku-4-5', 'anthropic');
+  push(23, 'gpt-5.6-luna', CUSTOM);
+  push(5, 'gpt-5.6-terra', CUSTOM);
+  push(4, 'gpt-5.6-sol', CUSTOM);
+  push(3, 'claude-opus-4-8', 'anthropic');
 
-  assert.strictEqual(fleet.length, 24);
+  assert.strictEqual(fleet.length, 35);
 
-  // "Referral Bot": 22 snapshots on retired models. Until nano was retired it was
-  // the fleet's only history-only case — on an approved model with a broken past.
-  // Retiring nano moved its top-level model too, so it is now an ordinary change
-  // and the fleet has no history-only agents left. Kept in the fixture because it
-  // is the agent with the most version history in production, and because that
-  // history is where the volume of writes actually comes from.
-  fleet[0].name = 'Referral Bot';
+  // History mixes providers in production: GPT-5.6 snapshots on the custom
+  // endpoint, a few on the built-in one, and Claude snapshots. Each maps by its
+  // own model, and only the custom-endpoint ones change provider.
+  fleet[0].name = 'Mixed history';
   fleet[0].versions = [
-    ...Array.from({ length: 17 }, () => ({ model: 'gpt-5-mini', provider: 'openAI' })),
-    ...Array.from({ length: 4 }, () => ({ model: 'gpt-5.4', provider: 'openAI' })),
-    { model: 'gpt-5.4-mini', provider: 'openAI' },
+    { model: 'gpt-5.6-luna', provider: CUSTOM },
+    { model: 'gpt-5.6-luna', provider: 'openAI' },
+    { model: 'claude-haiku-4-5', provider: 'anthropic' },
   ];
 
   const plans = fleet.map((a) => planAgentChanges(a, OPTS));
   const summary = summarize(plans);
 
-  assert.strictEqual(summary.agentsTotal, 24);
-  // Every agent moves its current model except the single claude-haiku-4-5 one.
-  // Retiring gpt-5.4-nano took this from 19/5/1 to 23/1/0: the five nano agents
-  // became ordinary targets, and Referral Bot — previously the lone history-only
-  // case — now moves its top-level model like everything else.
-  assert.strictEqual(summary.agentsChanged, 23);
-  assert.strictEqual(summary.agentsSkipped, 1);
+  // Nothing in the fleet is on an approved model yet, so every agent moves.
+  assert.strictEqual(summary.agentsTotal, 35);
+  assert.strictEqual(summary.agentsChanged, 35);
+  assert.strictEqual(summary.agentsSkipped, 0);
   assert.strictEqual(summary.agentsHistoryOnly, 0);
 
-  // 14 = 5 nano + 5 gpt-5.4-mini + 3 gpt-4.1 + 1 gpt-5-mini
-  assert.strictEqual(summary.byTarget['gpt-5.6-luna'].count, 14);
-  assert.strictEqual(summary.byTarget['gpt-5.6-terra'].count, 6);
-  assert.strictEqual(summary.byTarget['claude-opus-4-8'].count, 3);
-  assert.ok(!summary.byTarget['gpt-5.6-sol'], 'gpt-5.6-sol is approved but is not a target');
+  assert.strictEqual(summary.byTarget['gpt-6-luna'].count, 23);
+  // There is no GPT-6 terra: terra and sol both go to gpt-6.1-sol.
+  assert.strictEqual(summary.byTarget['gpt-6.1-sol'].count, 9);
+  assert.strictEqual(summary.byTarget['claude-opus-5-5'].count, 3);
 
-  // 20 agents move onto the custom endpoint (14 luna + 6 terra); the 3 Anthropic
-  // agents change model only; 1 is untouched.
+  // The 32 GPT-5.6 agents leave the retired endpoint; the 3 Claude agents
+  // change model only.
   const providerChanges = plans.filter((plan) =>
     plan.changes.some((c) => c.field === 'provider'),
   );
-  assert.strictEqual(providerChanges.length, 20);
+  assert.strictEqual(providerChanges.length, 32);
+
+  const mixed = plans[0].set;
+  assert.strictEqual(mixed['versions.0.provider'], 'openAI');
+  assert.ok(!('versions.1.provider' in mixed), 'already on openAI');
+  assert.strictEqual(mixed['versions.2.model'], 'claude-haiku-5-5');
+  assert.ok(!('versions.2.provider' in mixed), 'Claude stays on anthropic');
 });
