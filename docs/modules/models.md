@@ -8,7 +8,7 @@ at, which needs a migration.
 `env.defaults`:
 
 ```
-ANTHROPIC_MODELS=claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5
+ANTHROPIC_MODELS=claude-opus-5-5,claude-sonnet-5-5,claude-haiku-4-5
 OPENAI_MODELS=gpt-6-luna,gpt-6.1-sol
 ```
 
@@ -167,7 +167,7 @@ The migration runs these itself, but they are worth knowing:
 db.agents.aggregate([
   { $group: { _id: "$model", n: { $sum: 1 } } },
   { $match: { _id: { $nin: [
-      "claude-opus-5-5","claude-sonnet-5-5","claude-haiku-5-5",
+      "claude-opus-5-5","claude-sonnet-5-5","claude-haiku-4-5",
       "gpt-6.1-sol","gpt-6-luna" ] } } }
 ])
 

@@ -41,7 +41,9 @@
     "specs: retired modelSpecs names and their successors, for favorites pinned in",
     "the model selector (saved presets and conversations carry their spec in the",
     "targets above). The same scripts also move saved presets, which have the same",
-    "fields as a conversation, and favorites on a retired endpoint and model."
+    "fields as a conversation, and favorites on a retired endpoint and model.",
+    "",
+    "2026-10-15, later: Haiku stays on claude-haiku-4-5 for now (see env.defaults)."
   ],
   "targets": {
     "gpt-6-luna": {
@@ -67,10 +69,6 @@
     "claude-sonnet-5-5": {
       "endpoint": "anthropic",
       "model": "claude-sonnet-5-5"
-    },
-    "claude-haiku-5-5": {
-      "endpoint": "anthropic",
-      "model": "claude-haiku-5-5"
     }
   },
   "sources": {
@@ -105,7 +103,7 @@
       "keep": [
         "claude-opus-5-5",
         "claude-sonnet-5-5",
-        "claude-haiku-5-5"
+        "claude-haiku-4-5"
       ],
       "map": {
         "claude-opus-4-8": "claude-opus-5-5",
@@ -114,8 +112,7 @@
         "claude-opus-4-5": "claude-opus-5-5",
         "claude-sonnet-5": "claude-sonnet-5-5",
         "claude-sonnet-4-6": "claude-sonnet-5-5",
-        "claude-sonnet-4-5": "claude-sonnet-5-5",
-        "claude-haiku-4-5": "claude-haiku-5-5"
+        "claude-sonnet-4-5": "claude-sonnet-5-5"
       }
     }
   },
