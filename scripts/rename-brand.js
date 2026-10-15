@@ -1,5 +1,5 @@
 /*
- * Rename MLAGPT 4 -> MLAGPT 4.1 on the agents that carry it.
+ * Rename MLAGPT 4 / 4.1 -> MLAGPT 4.2 on the agents that carry it.
  *
  * ⚠️  Do not run this file directly. Run scripts/rename-brand.sh, which chooses
  * dry-run or apply and writes the audit trail.
