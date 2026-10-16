@@ -164,7 +164,7 @@ test('a conversation on the retired custom endpoint moves to the built-in one', 
     endpoint: 'openAI',
     model: 'gpt-6-luna',
     spec: 'quick',
-    reasoning_effort: 'medium',
+    reasoning_effort: 'low',
     maxContextTokens: 250000,
   });
   assert.deepStrictEqual(plan.unset, ['endpointType']);
