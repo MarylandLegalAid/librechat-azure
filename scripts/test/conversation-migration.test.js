@@ -346,7 +346,7 @@ test('two favorites landing on one successor keep a single pin', () => {
 });
 
 test('current favorites are left alone, and an unmapped model stops the run', () => {
-  const kept = planFavorites([{ endpoint: 'openAI', model: 'gpt-6-luna' }, { spec: 'deep' }], MAP);
+  const kept = planFavorites([{ endpoint: 'openAI', model: 'gpt-6-luna' }, { spec: 'complex' }], MAP);
   assert.strictEqual(kept.changed, false);
   assert.throws(() => planFavorites([{ endpoint: 'openAI', model: 'o1-pro' }], MAP), /Refusing to guess/);
 });
