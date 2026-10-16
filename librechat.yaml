@@ -348,7 +348,15 @@ endpoints:
 # (John, 2026-10-16). fileSearch/executeCode only preselect a tool; users can
 # still switch either on or off in the chat. Without modelSpecs.enforce a
 # conversation keeps the settings it stored, so changing a preset reaches only
-# new chats unless existing conversations are updated to match.
+# new chats unless existing conversations are updated to match (John: leave
+# old Quick threads at medium).
+#
+# No preset preselects File Search (John, 2026-10-16). Under unified uploads a
+# new attachment is never indexed: it reaches the model whole (PDFs and images
+# natively, other documents as text), with or without File Search (staging
+# test that day: same 23.5K-token prompt, no search call, nothing indexed).
+# File Search only reaches documents indexed before v0.8.8, in old threads or
+# re-attached from the side panel; users switch it on under Tools for those.
 #
 # addedEndpoints keeps the raw built-in endpoints selectable alongside the
 # presets. It must never list the retired custom endpoint, and no preset may
@@ -367,7 +375,6 @@ modelSpecs:
     - name: "quick"
       label: "Quick"
       description: "Fast and inexpensive — everyday questions, short drafting, quick summaries. For very long documents, use Complex."
-      fileSearch: true
       preset:
         endpoint: "openAI"
         model: "gpt-6-luna"
@@ -378,7 +385,6 @@ modelSpecs:
       label: "Standard"
       description: "Balanced — most legal and administrative work. For very long documents, use Complex."
       default: true
-      fileSearch: true
       executeCode: true
       preset:
         endpoint: "openAI"
@@ -389,7 +395,6 @@ modelSpecs:
     - name: "complex"
       label: "Complex"
       description: "Most capable — in-depth analysis, long documents, careful reasoning. Slower and costs more."
-      fileSearch: true
       executeCode: true
       preset:
         endpoint: "anthropic"
