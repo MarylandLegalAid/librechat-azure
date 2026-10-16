@@ -374,7 +374,7 @@ modelSpecs:
   list:
     - name: "quick"
       label: "Quick"
-      description: "Fast and inexpensive — everyday questions, short drafting, quick summaries. For very long documents, use Complex."
+      description: "Fast and inexpensive — rewriting emails, summarizing meeting notes, short drafts, everyday questions."
       preset:
         endpoint: "openAI"
         model: "gpt-6-luna"
@@ -383,7 +383,7 @@ modelSpecs:
         maxContextTokens: 250000
     - name: "standard"
       label: "Standard"
-      description: "Balanced — most legal and administrative work. For very long documents, use Complex."
+      description: "Balanced — most legal and administrative work, brainstorming, research and analysis. For very long documents, use Complex."
       default: true
       executeCode: true
       preset:
@@ -394,7 +394,7 @@ modelSpecs:
         maxContextTokens: 250000
     - name: "complex"
       label: "Complex"
-      description: "Most capable — in-depth analysis, long documents, careful reasoning. Slower and costs more."
+      description: "Capable but costly — in-depth analysis, very long documents, careful reasoning. Use it when Standard doesn't do the trick."
       executeCode: true
       preset:
         endpoint: "anthropic"
