@@ -335,9 +335,20 @@ endpoints:
 # =============================================================================
 # Model specs
 # =============================================================================
-# Three presets above the raw model selector. Standard is the softDefault: a
-# user's first-ever new chat uses it, and after that LibreChat remembers their
-# last choice. default:true would instead re-select it on every new chat.
+# Three presets at the top of the model selector. They carry no `group`: v0.8.8
+# lists ungrouped specs first, then the endpoints, then grouped specs, so a
+# group would put them at the bottom (John, 2026-10-16: top). A spec's `order`
+# does not sort the menu; list order does.
+#
+# Standard is the hard `default`: every new chat starts on it, whatever the
+# user picked last (John, 2026-10-16; revert to `softDefault: true` if people
+# dislike it, which remembers each user's last choice instead).
+#
+# Quick runs at low reasoning effort and does not preselect Run Code, for speed
+# (John, 2026-10-16). fileSearch/executeCode only preselect a tool; users can
+# still switch either on or off in the chat. Without modelSpecs.enforce a
+# conversation keeps the settings it stored, so changing a preset reaches only
+# new chats unless existing conversations are updated to match.
 #
 # addedEndpoints keeps the raw built-in endpoints selectable alongside the
 # presets. It must never list the retired custom endpoint, and no preset may
@@ -356,22 +367,17 @@ modelSpecs:
     - name: "quick"
       label: "Quick"
       description: "Fast and inexpensive — everyday questions, short drafting, quick summaries. For very long documents, use Complex."
-      group: "MLAGPT Presets"
-      groupIcon: "/assets/logo.svg"
       fileSearch: true
-      executeCode: true
       preset:
         endpoint: "openAI"
         model: "gpt-6-luna"
-        reasoning_effort: "medium"
+        reasoning_effort: "low"
         useResponsesApi: true
         maxContextTokens: 250000
     - name: "standard"
       label: "Standard"
       description: "Balanced — most legal and administrative work. For very long documents, use Complex."
-      group: "MLAGPT Presets"
-      groupIcon: "/assets/logo.svg"
-      softDefault: true
+      default: true
       fileSearch: true
       executeCode: true
       preset:
@@ -383,8 +389,6 @@ modelSpecs:
     - name: "complex"
       label: "Complex"
       description: "Most capable — in-depth analysis, long documents, careful reasoning. Slower and costs more."
-      group: "MLAGPT Presets"
-      groupIcon: "/assets/logo.svg"
       fileSearch: true
       executeCode: true
       preset:
