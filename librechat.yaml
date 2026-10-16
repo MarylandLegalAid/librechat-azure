@@ -345,8 +345,13 @@ endpoints:
 # dislike it, which remembers each user's last choice instead).
 #
 # Quick runs at low reasoning effort and does not preselect Run Code, for speed
-# (John, 2026-10-16). fileSearch/executeCode only preselect a tool; users can
-# still switch either on or off in the chat. Without modelSpecs.enforce a
+# (John, 2026-10-16). A preset's tool flags (executeCode, fileSearch, webSearch,
+# memory, skills, askUserQuestion) FORCE the tool on: the server adds it for
+# every turn on that preset whatever the chat's toggle says, so a user cannot
+# switch it off (staging 2026-10-16: Run Code unticked on Standard, the browser
+# sent execute_code:false, the model still ran code). The toggle can only ADD a
+# tool a preset lacks. `artifacts` is the exception: it only preselects, in the
+# browser, and the user can switch it off. Without modelSpecs.enforce a
 # conversation keeps the settings it stored, so changing a preset reaches only
 # new chats unless existing conversations are updated to match (John: leave
 # old Quick threads at medium).
@@ -354,7 +359,8 @@ endpoints:
 # No preset preselects File Search (John, 2026-10-16). Under unified uploads a
 # new attachment is never indexed: it reaches the model whole (PDFs and images
 # natively, other documents as text), with or without File Search (staging
-# test that day: same 23.5K-token prompt, no search call, nothing indexed).
+# test that day: 23,495 tokens with the tool, 23,358 without; the difference
+# is the tool's definition; no search call, nothing indexed).
 # File Search only reaches documents indexed before v0.8.8, in old threads or
 # re-attached from the side panel; users switch it on under Tools for those.
 #
