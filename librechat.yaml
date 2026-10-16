@@ -344,17 +344,22 @@ endpoints:
 # user picked last (John, 2026-10-16; revert to `softDefault: true` if people
 # dislike it, which remembers each user's last choice instead).
 #
-# Quick runs at low reasoning effort and does not preselect Run Code, for speed
-# (John, 2026-10-16). A preset's tool flags (executeCode, fileSearch, webSearch,
-# memory, skills, askUserQuestion) FORCE the tool on: the server adds it for
-# every turn on that preset whatever the chat's toggle says, so a user cannot
-# switch it off (staging 2026-10-16: Run Code unticked on Standard, the browser
-# sent execute_code:false, the model still ran code). The toggle can only ADD a
-# tool a preset lacks. `artifacts` is the exception: it only preselects, in the
-# browser, and the user can switch it off. Without modelSpecs.enforce a
-# conversation keeps the settings it stored, so changing a preset reaches only
-# new chats unless existing conversations are updated to match (John: leave
-# old Quick threads at medium).
+# Quick runs at low reasoning effort and has no Run Code, for speed (John,
+# 2026-10-16). Without modelSpecs.enforce a conversation keeps the settings it
+# stored, so changing a preset reaches only new chats unless existing
+# conversations are updated to match (John: leave old Quick threads at medium).
+#
+# A preset's tool flags (executeCode, fileSearch, webSearch, memory, skills,
+# askUserQuestion) FORCE the tool on: the server adds it for every turn on that
+# preset whatever the chat's toggle says, so a user cannot switch it off
+# (staging 2026-10-16: Run Code unticked on Standard, the browser sent
+# execute_code:false, the model still ran code). The toggle can only ADD a tool
+# a preset lacks. `artifacts` is the exception: it only preselects, in the
+# browser, and the user can switch it off.
+#
+# Artifacts is preselected on all three presets (John, 2026-10-16): longer
+# reusable drafts (letters, reports) open in a side panel. It adds roughly 3K
+# tokens of instructions to each turn; users switch it off in Tools Options.
 #
 # No preset preselects File Search (John, 2026-10-16). Under unified uploads a
 # new attachment is never indexed: it reaches the model whole (PDFs and images
@@ -381,6 +386,7 @@ modelSpecs:
     - name: "quick"
       label: "Quick"
       description: "Fast and inexpensive — rewriting emails, summarizing meeting notes, short drafts, everyday questions."
+      artifacts: true
       preset:
         endpoint: "openAI"
         model: "gpt-6-luna"
@@ -390,6 +396,7 @@ modelSpecs:
     - name: "standard"
       label: "Standard"
       description: "Balanced — most legal and administrative work. For very long documents, use Complex."
+      artifacts: true
       default: true
       executeCode: true
       preset:
@@ -401,6 +408,7 @@ modelSpecs:
     - name: "complex"
       label: "Complex"
       description: "Most capable — in-depth analysis, very long documents, careful reasoning. Slower and more costly."
+      artifacts: true
       executeCode: true
       preset:
         endpoint: "anthropic"
