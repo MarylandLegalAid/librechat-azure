@@ -97,7 +97,7 @@ interface:
   # measured on staging that day: v0.8.8 prices every Claude cache write at the
   # 5-minute rate (1.25x input), but its agents SDK sends the 1-hour cache,
   # billed at 2x ($8/M on Opus 5.5, not $5), so Claude threads read 15-30% low
-  # (a Deep thread showed $0.048 for $0.061). gpt-6.1-sol is priced as
+  # (a Complex thread showed $0.048 for $0.061). gpt-6.1-sol is priced as
   # gpt-6-sol, so its cache reads count double ($0.20/M, not $0.10/M); GPT-6
   # Luna is exact. Built-in endpoints take no price overrides (tokenConfig is
   # custom-endpoint only). Revisit after an upstream release prices the TTL.
@@ -163,7 +163,7 @@ interface:
 
      ## 5. Choosing a Preset
 
-     Standard is the default and suits most legal and administrative work. Quick is faster and less expensive, for everyday questions, short drafting and quick summaries. Deep is the most capable, for complex analysis, long documents and careful reasoning; it is slower and costs more. For very long documents, use Deep.
+     Standard is the default and suits most legal and administrative work. Quick is faster and less expensive, for everyday questions, short drafting and quick summaries. Complex is the most capable, for in-depth analysis, long documents and careful reasoning; it is slower and costs more. For very long documents, use Complex.
 
      ## 6. Code Interpreter
 
@@ -345,7 +345,7 @@ endpoints:
 #
 # maxContextTokens 250000 on the GPT-6 presets keeps every prompt below the
 # 272K tier where GPT-6 prices double; summarization (below) makes the cap
-# summarize older history instead of dropping it. Deep has no cap: Opus 5.5 is
+# summarize older history instead of dropping it. Complex has no cap: Opus 5.5 is
 # priced flat across its window.
 modelSpecs:
   addedEndpoints:
@@ -355,7 +355,7 @@ modelSpecs:
   list:
     - name: "quick"
       label: "Quick"
-      description: "Fast and inexpensive — everyday questions, short drafting, quick summaries. For very long documents, use Deep."
+      description: "Fast and inexpensive — everyday questions, short drafting, quick summaries. For very long documents, use Complex."
       group: "MLAGPT Presets"
       groupIcon: "/assets/logo.svg"
       fileSearch: true
@@ -368,7 +368,7 @@ modelSpecs:
         maxContextTokens: 250000
     - name: "standard"
       label: "Standard"
-      description: "Balanced — most legal and administrative work. For very long documents, use Deep."
+      description: "Balanced — most legal and administrative work. For very long documents, use Complex."
       group: "MLAGPT Presets"
       groupIcon: "/assets/logo.svg"
       softDefault: true
@@ -380,9 +380,9 @@ modelSpecs:
         reasoning_effort: "medium"
         useResponsesApi: true
         maxContextTokens: 250000
-    - name: "deep"
-      label: "Deep"
-      description: "Most capable — complex analysis, long documents, careful reasoning. Slower and costs more."
+    - name: "complex"
+      label: "Complex"
+      description: "Most capable — in-depth analysis, long documents, careful reasoning. Slower and costs more."
       group: "MLAGPT Presets"
       groupIcon: "/assets/logo.svg"
       fileSearch: true
@@ -485,7 +485,7 @@ memory:
 # here: an earlier one only means more summaries and more loss, at no saving.
 #
 # One summarizer for every chat, the cheapest model we run. Left unset, each
-# chat would summarize itself, so a Deep chat would pay Opus at effort high for
+# chat would summarize itself, so a Complex chat would pay Opus at effort high for
 # housekeeping. For Claude chats this means the older part of the thread goes to
 # OpenAI to be summarized (both are covered providers; see docs/compliance.md).
 #
@@ -496,7 +496,7 @@ memory:
 #
 # The current turn is never summarized: one message bigger than the budget on
 # Quick or Standard (a very long document) fails with a token-budget error.
-# Deep is the answer for that.
+# Complex is the answer for that.
 summarization:
   enabled: true
   provider: "openAI"
