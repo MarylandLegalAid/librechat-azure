@@ -49,7 +49,9 @@
     "reasoning_effort. Without modelSpecs.enforce the server never applies a preset;",
     "the browser sends what the conversation holds, so a moved conversation without",
     "it runs at the provider's default effort, not the preset's (staging check).",
-    "validate-config.sh checks that a target agrees with its spec's preset."
+    "validate-config.sh checks that a target agrees with its spec's preset.",
+    "",
+    "2026-10-16: Quick runs at low effort (John), so its target does too."
   ],
   "targets": {
     "gpt-6-luna": {
@@ -57,7 +59,7 @@
       "endpointType": null,
       "model": "gpt-6-luna",
       "spec": "quick",
-      "reasoning_effort": "medium",
+      "reasoning_effort": "low",
       "useResponsesApi": true,
       "maxContextTokens": 250000
     },

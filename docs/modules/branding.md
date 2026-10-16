@@ -130,6 +130,10 @@ the way — LibreChat remembers what each user last chose after that. `default: 
 by contrast, re-selects it on every new chat regardless of preference, which people
 find annoying quite quickly.
 
+Where an entry appears in the dropdown depends on `group`: entries without one are
+listed first, above the providers; entries with a `group` are listed after them, under
+that heading. `order` does not sort the dropdown; list order does.
+
 !!! warning
     If you add any `modelSpecs.list` entry, `interface.modelSelect` and
     `interface.parameters` are silently disabled unless they are explicitly set to
