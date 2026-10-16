@@ -383,7 +383,7 @@ modelSpecs:
         maxContextTokens: 250000
     - name: "standard"
       label: "Standard"
-      description: "Balanced — most legal and administrative work, brainstorming, research and analysis. For very long documents, use Complex."
+      description: "Balanced — most legal and administrative work. For very long documents, use Complex."
       default: true
       executeCode: true
       preset:
