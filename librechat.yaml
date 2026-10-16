@@ -394,7 +394,7 @@ modelSpecs:
         maxContextTokens: 250000
     - name: "complex"
       label: "Complex"
-      description: "Capable but costly — in-depth analysis, very long documents, careful reasoning. Use it when Standard doesn't do the trick."
+      description: "Most capable — in-depth analysis, very long documents, careful reasoning. Slower and more costly."
       executeCode: true
       preset:
         endpoint: "anthropic"
