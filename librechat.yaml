@@ -381,9 +381,10 @@ endpoints:
 # for prompts between 272K and 400K. Complex has no cap: Opus 5.5 is priced
 # flat across its window.
 #
-# The admin panel's DB override holds a copy of modelSpecs.list (descriptions
-# edited there, 2026-10-19), and that copy wins over this file. Change a preset
-# in both places, or remove the override's copy.
+# Change presets here, not in the admin panel. Saving a preset there stores a
+# copy of the whole modelSpecs.list in the DB override, which then wins over
+# this file, and the panel cannot set maxContextTokens. That happened on
+# 2026-10-19; the copy was removed (John), and this file is the only source.
 modelSpecs:
   addedEndpoints:
     - openAI
