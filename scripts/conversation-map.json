@@ -70,7 +70,7 @@
       "spec": "standard",
       "reasoning_effort": "medium",
       "useResponsesApi": true,
-      "maxContextTokens": 250000
+      "maxContextTokens": 400000
     },
     "claude-opus-5-5": {
       "endpoint": "anthropic",

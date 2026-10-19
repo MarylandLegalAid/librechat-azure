@@ -373,10 +373,17 @@ endpoints:
 # presets. It must never list the retired custom endpoint, and no preset may
 # point at it (validate-config.sh checks both).
 #
-# maxContextTokens 250000 on the GPT-6 presets keeps every prompt below the
-# 272K tier where GPT-6 prices double; summarization (below) makes the cap
-# summarize older history instead of dropping it. Complex has no cap: Opus 5.5 is
-# priced flat across its window.
+# maxContextTokens caps each prompt; summarization (below) makes the cap
+# summarize older history instead of dropping it. GPT-6 prices a whole request
+# at double the input rate (1.5x output) once its prompt passes 272K tokens.
+# Quick: 250000, below that step. Standard: 400000 (John, 2026-10-19), past it
+# on purpose so long documents fit on the default preset, at the higher rate
+# for prompts between 272K and 400K. Complex has no cap: Opus 5.5 is priced
+# flat across its window.
+#
+# The admin panel's DB override holds a copy of modelSpecs.list (descriptions
+# edited there, 2026-10-19), and that copy wins over this file. Change a preset
+# in both places, or remove the override's copy.
 modelSpecs:
   addedEndpoints:
     - openAI
@@ -385,7 +392,7 @@ modelSpecs:
   list:
     - name: "quick"
       label: "Quick"
-      description: "Fast and inexpensive — rewriting emails, summarizing meeting notes, short drafts, everyday questions."
+      description: "Fast and inexpensive — email drafts, meeting notes, everyday questions."
       artifacts: true
       preset:
         endpoint: "openAI"
@@ -395,7 +402,7 @@ modelSpecs:
         maxContextTokens: 250000
     - name: "standard"
       label: "Standard"
-      description: "Balanced — most legal and administrative work. For very long documents, use Complex."
+      description: "Balanced — best option for most legal and administrative work. Great for brainstorming, research, and analysis."
       artifacts: true
       default: true
       executeCode: true
@@ -404,10 +411,10 @@ modelSpecs:
         model: "gpt-6.1-sol"
         reasoning_effort: "medium"
         useResponsesApi: true
-        maxContextTokens: 250000
+        maxContextTokens: 400000
     - name: "complex"
       label: "Complex"
-      description: "Most capable — in-depth analysis, very long documents, careful reasoning. Slower and more costly."
+      description: "Capable but costly — use sparingly for in-depth analysis, careful reasoning, or a second opinion."
       artifacts: true
       executeCode: true
       preset:
@@ -503,8 +510,8 @@ memory:
 # =============================================================================
 # When the next prompt would exceed a chat's context budget, the older part of
 # the thread is summarized instead of dropped. The budget is the trigger: a
-# preset's maxContextTokens (Quick and Standard: 250,000, below GPT-6's 272K
-# price step), otherwise the model's window x 0.95. So there is no `trigger`
+# preset's maxContextTokens (Quick 250,000, Standard 400,000; see Model specs),
+# otherwise the model's window x 0.95. So there is no `trigger`
 # here: an earlier one only means more summaries and more loss, at no saving.
 #
 # One summarizer for every chat, the cheapest model we run. Left unset, each
@@ -518,8 +525,11 @@ memory:
 # upstream's defaults, which already ask for names and identifiers verbatim.
 #
 # The current turn is never summarized: one message bigger than the budget on
-# Quick or Standard (a very long document) fails with a token-budget error.
-# Complex is the answer for that.
+# Quick or Standard (a very long pasted text) fails with a token-budget error.
+# Complex takes long text, but not large PDFs: attachments go inline as base64,
+# and Anthropic refuses a request over 32 MB or 600 pages (413). Prod,
+# 2026-10-19: three scanned PDFs, 126 MB, 756 pages, failed on Standard (over
+# GPT-6.1 Sol's window) and on Complex (413).
 summarization:
   enabled: true
   provider: "openAI"
