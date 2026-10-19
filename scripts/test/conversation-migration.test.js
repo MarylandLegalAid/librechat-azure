@@ -85,14 +85,15 @@ test('every GPT-5.6 model has a GPT-6 destination, on either OpenAI endpoint', (
 });
 
 test('GPT-6 targets look like conversations the UI creates from the preset', () => {
-  [['gpt-6-luna', 'quick'], ['gpt-6.1-sol', 'standard']].forEach(([name, spec]) => {
+  // Quick stays below the 272K tier where GPT-6 prices double; Standard goes
+  // past it on purpose (John, 2026-10-19).
+  [['gpt-6-luna', 'quick', 250000], ['gpt-6.1-sol', 'standard', 400000]].forEach(([name, spec, max]) => {
     const target = MAP.targets[name];
     assert.strictEqual(target.endpoint, 'openAI');
     assert.strictEqual(target.endpointType, null, 'built-in conversations have no endpointType');
     assert.strictEqual(target.spec, spec, 'spec must be the preset on the same model');
     assert.strictEqual(target.useResponsesApi, true);
-    // Below the 272K tier where GPT-6 prices double.
-    assert.strictEqual(target.maxContextTokens, 250000);
+    assert.strictEqual(target.maxContextTokens, max);
   });
 });
 
@@ -145,7 +146,7 @@ test('an old openAI conversation moves to GPT-6 with the full field set', () => 
     spec: 'standard',
     reasoning_effort: 'medium',
     useResponsesApi: true,
-    maxContextTokens: 250000,
+    maxContextTokens: 400000,
   });
   assert.deepStrictEqual(plan.unset, []);
 });
