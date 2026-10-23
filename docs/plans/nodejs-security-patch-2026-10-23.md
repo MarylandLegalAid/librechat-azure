@@ -144,5 +144,6 @@ digest and actual Node version still need verification.
 
 Completion means every affected, enabled Node service has a verified fixed runtime,
 the main application has passed production smoke tests, and the official upgrade
-path remains tracked and tested. Implementing this plan requires live inventory,
-registry/build access, and a staging rehearsal; those have not been performed yet.
+path remains tracked and tested. The execution record documents the inventory,
+published artifacts, staging rehearsal, production verification, and remaining
+dependency advisories.

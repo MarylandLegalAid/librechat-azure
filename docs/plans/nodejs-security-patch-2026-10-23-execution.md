@@ -1,13 +1,14 @@
 # October 2026 Node security patch execution
 
-Status: artifacts published and staging verified; production activation pending.
+Status: deployed successfully on October 23, 2026, at 17:06:55 UTC
+(1:06:55 p.m. Eastern). Production activation commit: `a764d89`.
 
 The [plan](nodejs-security-patch-2026-10-23.md) is implemented through an image-only
 Compose override. The official LibreChat image reference remains in `compose.yaml`
 for Renovate. Remove `compose.security.yml` when upgrading to a verified patched
 official image; deployment and CI reject an override for a different release.
 
-| Component | Before | Candidate |
+| Component | Before | Deployed |
 |---|---|---|
 | LibreChat | v0.8.8, Node 24.16.0, Alpine 3.24.2 | Same application source and lockfile, Node 24.22.1 on Alpine 3.24 |
 | LegalServer MCP | v3.1.0, Node 20.20.2 | v3.1.1, Node 22.23.4, same application behavior |
@@ -43,7 +44,8 @@ MongoDB documents, 31,091 embeddings, and 7,727 indexed conversations against 7,
 eligible restored conversations; the synthetic test added a conversation during
 verification. Existing uploaded-PDF download, old-document embedding retrieval,
 conversation search, password login, admin-panel login, agent/file/conversation
-API responses, streamed chat, a synthetic upload read by the model, MCP handshake
+API responses, streamed chat with the Quick, Standard, and Complex presets, a
+synthetic upload read by the model, MCP handshake
 and tool listing, DOCX generation, real Python execution, generated-file download,
 Brotli decompression, and native image processing were exercised.
 
@@ -56,7 +58,26 @@ measure while correcting the patch, not a completed fix.
 
 A fresh paired database backup completed successfully, and the incremental
 data-disk snapshot `librechat-node-hotfix-20261023` reached `Succeeded` before the
-cutover. Database schema and embedding model changes are outside this patch.
+cutover. A second paired backup from `2026-10-23T17-03-36Z` completed successfully
+immediately before activation. Database schema and embedding model changes are
+outside this patch.
+
+Production's public `/health` endpoint was sampled every half second across the
+cutover. Of 202 samples, 20 failed, beginning at 17:06:42 UTC and recovering at
+17:06:52 UTC: **10.0 seconds of observed interruption**. The deploy script reported
+success at 17:06:55 UTC. All three changed containers reported healthy, their
+running Node versions matched the targets, and the running application image
+reference matched the approved digest.
+
+Production verification passed authenticated reads for user, agent, file,
+conversation, model, and endpoint configuration data; both MCP handshakes and tool
+listings; intact conversation indexing; retrieval from an existing document's
+embeddings; Brotli round-trip; and native image processing. Public chat and admin
+login pages loaded, and the OpenID entry point redirected successfully. The
+automatic deploy timer was restored. Temporary staging containers, copied
+database/file data, and copied credentials were removed; the development VM was
+returned to its prior deallocated state. The temporary production download of the
+backup pair was removed, leaving the retained Blob backups and disk snapshot.
 
 The image scan is **not clean**: it reports four critical and fourteen high
 advisories in npm dependencies from the unchanged LibreChat lockfile. These are
