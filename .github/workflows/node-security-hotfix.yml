@@ -1,0 +1,95 @@
+name: Build LibreChat Node security hotfix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: librechat-node-security-hotfix
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SOURCE_SHA: e8f3be08623663d4ad7f7241e693c94469b63bb0
+      NODE_IMAGE: node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
+      HOTFIX_IMAGE: ghcr.io/marylandlegalaid/librechat-node-hotfix:v0.8.8-node24.22.1-r1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: LibreChat-AI/LibreChat
+          ref: e8f3be08623663d4ad7f7241e693c94469b63bb0
+      - name: Verify source and replace only the Node base image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          path = Path('Dockerfile')
+          source = path.read_text()
+          old = 'FROM node:24.16.0-alpine AS node'
+          assert source.count(old) == 1, 'Upstream Dockerfile no longer matches'
+          path.write_text(source.replace(old, f'FROM {os.environ["NODE_IMAGE"]} AS node'))
+          PY
+          git diff --exit-code -- package-lock.json
+          git diff -- Dockerfile
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build the production artifact
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          target: node
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.HOTFIX_IMAGE }}
+          build-args: |
+            BUILD_COMMIT=${{ env.SOURCE_SHA }}
+            BUILD_BRANCH=v0.8.8-node24.22.1-r1
+          labels: |
+            org.opencontainers.image.source=https://github.com/MarylandLegalAid/librechat-azure
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.description=LibreChat v0.8.8 with the October 2026 Node security fixes
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify the built runtime
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node "$HOTFIX_IMAGE" -e 'if (process.version !== "v24.22.1") process.exit(1); console.log(JSON.stringify(process.versions))' | tee runtime-versions.json
+          docker run --rm --entrypoint sh "$HOTFIX_IMAGE" -c 'test "$(id -u)" = 1000; test -f /app/api/server/index.js; test -f /app/client/dist/index.html; cat /etc/alpine-release'
+      - name: Scan the artifact
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: ${{ env.HOTFIX_IMAGE }}
+          format: json
+          output: trivy-results.json
+          exit-code: '0'
+      - name: Publish the verified artifact
+        run: |
+          set -euo pipefail
+          docker push "$HOTFIX_IMAGE" | tee publish.txt
+          {
+            echo "Source: $SOURCE_SHA"
+            echo "Node base: $NODE_IMAGE"
+            cat runtime-versions.json
+            cat publish.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-hotfix-evidence
+          path: |
+            runtime-versions.json
+            trivy-results.json
+            publish.txt

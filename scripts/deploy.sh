@@ -297,6 +297,12 @@ bring_up_stack() {
 
   # --- 6 & 7. Pull and start ------------------------------------------------
   local -a compose_args=(-f compose.yaml -f "$storage_compose")
+  local security_overlay
+  if ! security_overlay="$("$REPO_ROOT/scripts/security-overlay.sh" "$REPO_ROOT")"; then
+    fail "security image override failed validation"
+    return 1
+  fi
+  [ -z "$security_overlay" ] || compose_args+=(-f "$security_overlay")
   if [ "${#profiles[@]}" -gt 0 ]; then
     log "optional services: ${profiles[*]}"
     for profile in "${profiles[@]}"; do

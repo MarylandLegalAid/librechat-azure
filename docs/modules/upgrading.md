@@ -1,5 +1,14 @@
 # Upgrading LibreChat
 
+For the proposed October 2026 runtime fix while awaiting an upstream image, see the
+[temporary Node.js security patch plan](../plans/nodejs-security-patch-2026-10-23.md).
+
+When `compose.security.yml` is present, deployments append it after the storage
+overlay. Include `-f compose.security.yml` in manual Compose commands too. The
+override is tied to the exact official image reference in `compose.yaml`; remove
+it in the same change as the next official upgrade, once that image's runtime is
+verified patched. CI and deployment reject a mismatched override.
+
 Renovate opens a pull request when a new LibreChat release ships. The pull request
 changes one line in `compose.yaml`:
 

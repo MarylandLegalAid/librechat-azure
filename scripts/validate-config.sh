@@ -124,6 +124,11 @@ group "Compose files parse, in every storage mode and profile combination"
 
 PROFILE_SETS=("" "mcp-legalserver" "mcp-letterwriter" "mcp-legalserver,mcp-letterwriter")
 
+SECURITY_OVERLAY=""
+if ! SECURITY_OVERLAY="$(scripts/security-overlay.sh "$REPO_ROOT")"; then
+  fail "security image override failed validation"
+fi
+
 for mode in "${STORAGE_MODES[@]}"; do
   compose_overlay="compose.storage.${mode}.yml"
 
@@ -143,12 +148,19 @@ for mode in "${STORAGE_MODES[@]}"; do
       done
     fi
 
-    if docker compose "${args[@]}" config >/dev/null 2>&1; then
-      pass "$label"
-    else
-      fail "$label"
-      docker compose "${args[@]}" config 2>&1 | sed 's/^/      /' | head -10
-    fi
+    for security_mode in base hotfix; do
+      security_args=()
+      if [ "$security_mode" = hotfix ]; then
+        [ -n "$SECURITY_OVERLAY" ] || continue
+        security_args=(-f "$SECURITY_OVERLAY")
+      fi
+      if docker compose "${args[@]}" "${security_args[@]}" config >/dev/null 2>&1; then
+        pass "$label / $security_mode"
+      else
+        fail "$label / $security_mode"
+        docker compose "${args[@]}" "${security_args[@]}" config 2>&1 | sed 's/^/      /' | head -10
+      fi
+    done
   done
 done
 

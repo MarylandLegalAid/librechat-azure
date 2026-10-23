@@ -96,7 +96,10 @@ jobs:
       - name: Unit-test the agent migration logic
         # The part of the migration that can be wrong in a way nobody notices
         # until someone reverts an agent six months from now.
-        run: node --test "scripts/test/*.test.js"
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          node --test "scripts/test/*.test.js"
 
       - name: Shell syntax
         run: |
