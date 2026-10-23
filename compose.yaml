@@ -302,7 +302,7 @@ services:
   # the trust boundary; both images support an optional shared-secret header
   # that is deliberately left unset. See docs/modules/mcp-servers.md.
   legalserver-mcp:
-    image: ghcr.io/marylandlegalaid/legalserver-mcp:v3.1.0
+    image: ghcr.io/marylandlegalaid/legalserver-mcp:v3.1.1@sha256:6014a019eac45e60a7c8640a6188c38650f289a7934b4419fac04ffec829ffd1
     container_name: legalserver-mcp
     profiles: ["mcp-legalserver"]
     restart: unless-stopped
@@ -322,7 +322,7 @@ services:
       retries: 3
 
   letterwriter-mcp:
-    image: ghcr.io/marylandlegalaid/letterwriter-mcp:v1.1.0
+    image: ghcr.io/marylandlegalaid/letterwriter-mcp:v1.1.1@sha256:77f21ca8ee406930c06200bc2728534ad2932123bec6f837ab6bbe27213ad25d
     container_name: letterwriter-mcp
     profiles: ["mcp-letterwriter"]
     restart: unless-stopped

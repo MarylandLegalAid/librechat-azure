@@ -1,6 +1,6 @@
 # Upgrading LibreChat
 
-For the proposed October 2026 runtime fix while awaiting an upstream image, see the
+For the October 2026 runtime fix while awaiting an upstream image, see the
 [temporary Node.js security patch plan](../plans/nodejs-security-patch-2026-10-23.md).
 
 When `compose.security.yml` is present, deployments append it after the storage

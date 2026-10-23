@@ -1,6 +1,7 @@
 # Temporary Node.js security patch plan
 
-Prepared October 23, 2026. Status: proposed; no images have been built or deployed.
+Prepared October 23, 2026. Implementation and verification are tracked in the
+[execution record](nodejs-security-patch-2026-10-23-execution.md).
 
 Rebuild the exact LibreChat release we already run with a patched Node.js runtime,
 then select that image with a temporary Compose overlay. Keep the official image

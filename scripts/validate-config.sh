@@ -156,6 +156,15 @@ for mode in "${STORAGE_MODES[@]}"; do
       fi
       if docker compose "${args[@]}" "${security_args[@]}" config >/dev/null 2>&1; then
         pass "$label / $security_mode"
+        image_file=compose.yaml
+        [ "$security_mode" = base ] || image_file="$SECURITY_OVERLAY"
+        expected_image="$(yq -r '.services.api.image' "$image_file")"
+        actual_image="$(docker compose "${args[@]}" "${security_args[@]}" config --format json | jq -r '.services.api.image')"
+        if [ "$actual_image" = "$expected_image" ]; then
+          pass "$label / $security_mode: correct API image selected"
+        else
+          fail "$label / $security_mode: selected $actual_image instead of $expected_image"
+        fi
       else
         fail "$label / $security_mode"
         docker compose "${args[@]}" "${security_args[@]}" config 2>&1 | sed 's/^/      /' | head -10

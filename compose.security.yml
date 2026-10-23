@@ -1,0 +1,11 @@
+# Temporary runtime rebuild of the official source. Remove this file in the
+# same change as the next verified patched official LibreChat image upgrade.
+x-security-patch:
+  upstream-image: ghcr.io/librechat-ai/librechat:v0.8.8
+  upstream-commit: e8f3be08623663d4ad7f7241e693c94469b63bb0
+  node-version: 24.22.1
+  build-run: https://github.com/MarylandLegalAid/librechat-azure/actions/runs/39988924596
+
+services:
+  api:
+    image: ghcr.io/marylandlegalaid/librechat-node-hotfix:v0.8.8-node24.22.1-r1@sha256:e2f0bdeabf61e8e485aaea7e696e1042e980b25b552ffa07440410db01727dc0
