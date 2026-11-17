@@ -54,9 +54,22 @@ write_files:
       APT="apt-get -o DPkg::Lock::Timeout=900 -qq"
       export DEBIAN_FRONTEND=noninteractive
       for _ in $(seq 1 120); do
-        fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+        fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1 || break
         sleep 5
       done
+      # DPkg::Lock::Timeout covers the dpkg locks only. `apt-get update` takes
+      # the lists lock, which a parallel apt run can still hold, and then fails
+      # at once ("Could not get lock /var/lib/apt/lists/lock"; seen 2026-11-17
+      # on a fresh interpreter VM). Retry it for up to 15 minutes.
+      apt_update() {
+        local i
+        for i in $(seq 1 90); do
+          $APT update && return 0
+          log "apt-get update failed (attempt $i); retrying in 10 s"
+          sleep 10
+        done
+        return 1
+      }
 
       # --- The one hardware requirement -----------------------------------
       # Every execution is a micro-VM. Without nested virtualization there is
@@ -75,7 +88,7 @@ write_files:
         chmod a+r /etc/apt/keyrings/docker.asc
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
           > /etc/apt/sources.list.d/docker.list
-        $APT update
+        apt_update
         $APT install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       fi
       systemctl enable --now docker
@@ -88,7 +101,7 @@ write_files:
         chmod a+r /etc/apt/keyrings/microsoft.gpg
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
           > /etc/apt/sources.list.d/azure-cli.list
-        $APT update
+        apt_update
         $APT install -y azure-cli
       fi
       az version --output tsv | head -1
@@ -126,7 +139,8 @@ write_files:
         git clone --branch "$DEPLOY_BRANCH" --depth 1 "$REPO_URL" /srv/codeinterpreter/app
         echo "[bootstrap] cloned"
       fi
-      git config --global --add safe.directory /srv/codeinterpreter/app
+      # --system, not --global: run by hand through `az vm run-command`, HOME is unset.
+      git config --system --add safe.directory /srv/codeinterpreter/app
       echo "[bootstrap] done — next: seed the vault, then"
       echo "            /srv/codeinterpreter/app/scripts/codeinterpreter-deploy.sh --force"
 
