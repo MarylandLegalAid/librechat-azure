@@ -9,7 +9,7 @@ at, which needs a migration.
 
 ```
 ANTHROPIC_MODELS=claude-opus-5-5,claude-sonnet-5-5,claude-haiku-4-5
-OPENAI_MODELS=gpt-6-luna,gpt-6.1-sol
+OPENAI_MODELS=gpt-6-luna,gpt-6.2-sol
 ```
 
 Both are allowlists: the server refuses any model that is not listed, including in
@@ -88,7 +88,7 @@ configuration. Moving a conversation changes only the model its next turn uses.
 
 ```json
 {
-  "gpt-5.6-sol":     { "model": "gpt-6.1-sol",     "provider": "openAI" },
+  "gpt-5.6-sol":     { "model": "gpt-6.2-sol",     "provider": "openAI" },
   "claude-opus-4-8": { "model": "claude-opus-5-5", "provider": "anthropic" }
 }
 ```
@@ -168,7 +168,7 @@ db.agents.aggregate([
   { $group: { _id: "$model", n: { $sum: 1 } } },
   { $match: { _id: { $nin: [
       "claude-opus-5-5","claude-sonnet-5-5","claude-haiku-4-5",
-      "gpt-6.1-sol","gpt-6-luna" ] } } }
+      "gpt-6.2-sol","gpt-6-luna" ] } } }
 ])
 
 // and none hiding in version history
@@ -196,7 +196,7 @@ so it looks like a conversation the UI would have created on that model:
   }
 },
 "sources": {
-  "openAI": { "keep": ["gpt-6-luna", "gpt-6.1-sol"], "map": { "gpt-4.1": "gpt-6-luna" } }
+  "openAI": { "keep": ["gpt-6-luna", "gpt-6.2-sol"], "map": { "gpt-4.1": "gpt-6-luna" } }
 }
 ```
 

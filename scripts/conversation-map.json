@@ -51,7 +51,11 @@
     "it runs at the provider's default effort, not the preset's (staging check).",
     "validate-config.sh checks that a target agrees with its spec's preset.",
     "",
-    "2026-10-16: Quick runs at low effort (John), so its target does too."
+    "2026-10-16: Quick runs at low effort (John), so its target does too.",
+    "",
+    "2026-11-17 (UPGRADE_PLAN Round 2, gate D2): GPT-6.2 Sol replaces GPT-6.1 Sol",
+    "(same price, window and limits). Conversations on gpt-6.1-sol move to the",
+    "Standard target, and every row that went to 6.1 Sol now goes to 6.2 Sol."
   ],
   "targets": {
     "gpt-6-luna": {
@@ -63,10 +67,10 @@
       "useResponsesApi": true,
       "maxContextTokens": 250000
     },
-    "gpt-6.1-sol": {
+    "gpt-6.2-sol": {
       "endpoint": "openAI",
       "endpointType": null,
-      "model": "gpt-6.1-sol",
+      "model": "gpt-6.2-sol",
       "spec": "standard",
       "reasoning_effort": "medium",
       "useResponsesApi": true,
@@ -86,21 +90,22 @@
       "keep": [],
       "map": {
         "gpt-5.6-luna": "gpt-6-luna",
-        "gpt-5.6-terra": "gpt-6.1-sol",
-        "gpt-5.6-sol": "gpt-6.1-sol"
+        "gpt-5.6-terra": "gpt-6.2-sol",
+        "gpt-5.6-sol": "gpt-6.2-sol"
       }
     },
     "openAI": {
       "keep": [
         "gpt-6-luna",
-        "gpt-6.1-sol"
+        "gpt-6.2-sol"
       ],
       "map": {
         "gpt-5.6-luna": "gpt-6-luna",
-        "gpt-5.6-terra": "gpt-6.1-sol",
-        "gpt-5.6-sol": "gpt-6.1-sol",
-        "gpt-5.5": "gpt-6.1-sol",
-        "gpt-5.4": "gpt-6.1-sol",
+        "gpt-5.6-terra": "gpt-6.2-sol",
+        "gpt-5.6-sol": "gpt-6.2-sol",
+        "gpt-6.1-sol": "gpt-6.2-sol",
+        "gpt-5.5": "gpt-6.2-sol",
+        "gpt-5.4": "gpt-6.2-sol",
         "gpt-5.2": "gpt-6-luna",
         "gpt-4.1": "gpt-6-luna",
         "gpt-5.1": "gpt-6-luna",

@@ -97,8 +97,8 @@ interface:
   # measured on staging that day: v0.8.8 prices every Claude cache write at the
   # 5-minute rate (1.25x input), but its agents SDK sends the 1-hour cache,
   # billed at 2x ($8/M on Opus 5.5, not $5), so Claude threads read 15-30% low
-  # (a Complex thread showed $0.048 for $0.061). gpt-6.1-sol is priced as
-  # gpt-6-sol, so its cache reads count double ($0.20/M, not $0.10/M); GPT-6
+  # (a Complex thread showed $0.048 for $0.061). gpt-6.2-sol (like 6.1) is priced
+  # as gpt-6-sol, so its cache reads count double ($0.20/M, not $0.10/M); GPT-6
   # Luna is exact. Built-in endpoints take no price overrides (tokenConfig is
   # custom-endpoint only). Revisit after an upstream release prices the TTL.
   contextCost: true
@@ -409,7 +409,7 @@ modelSpecs:
       executeCode: true
       preset:
         endpoint: "openAI"
-        model: "gpt-6.1-sol"
+        model: "gpt-6.2-sol"
         reasoning_effort: "medium"
         useResponsesApi: true
         maxContextTokens: 400000
