@@ -67,8 +67,8 @@ test('every OpenAI model found on the old endpoint in production has a destinati
 });
 
 test('cheaper old OpenAI models go to Luna, the larger ones to Sol (M15)', () => {
-  assert.strictEqual(MAP.sources.openAI.map['gpt-5.5'], 'gpt-6.1-sol');
-  assert.strictEqual(MAP.sources.openAI.map['gpt-5.4'], 'gpt-6.1-sol');
+  assert.strictEqual(MAP.sources.openAI.map['gpt-5.5'], 'gpt-6.2-sol');
+  assert.strictEqual(MAP.sources.openAI.map['gpt-5.4'], 'gpt-6.2-sol');
   assert.strictEqual(MAP.sources.openAI.map['gpt-5.2'], 'gpt-6-luna');
   assert.strictEqual(MAP.sources.openAI.map['gpt-4.1'], 'gpt-6-luna');
 });
@@ -79,15 +79,21 @@ test('every GPT-5.6 model has a GPT-6 destination, on either OpenAI endpoint', (
   // (seen on staging, 2026-10-15), so it may arrive with a GPT-5.6 model.
   [CUSTOM, 'openAI'].forEach((endpoint) => {
     assert.strictEqual(MAP.sources[endpoint].map['gpt-5.6-luna'], 'gpt-6-luna');
-    assert.strictEqual(MAP.sources[endpoint].map['gpt-5.6-terra'], 'gpt-6.1-sol');
-    assert.strictEqual(MAP.sources[endpoint].map['gpt-5.6-sol'], 'gpt-6.1-sol');
+    assert.strictEqual(MAP.sources[endpoint].map['gpt-5.6-terra'], 'gpt-6.2-sol');
+    assert.strictEqual(MAP.sources[endpoint].map['gpt-5.6-sol'], 'gpt-6.2-sol');
   });
+});
+
+test('GPT-6.1 Sol conversations move to 6.2 Sol, and 6.1 is no longer kept (Round 2, D2)', () => {
+  assert.strictEqual(MAP.sources.openAI.map['gpt-6.1-sol'], 'gpt-6.2-sol');
+  assert.ok(!MAP.sources.openAI.keep.includes('gpt-6.1-sol'));
+  assert.ok(MAP.sources.openAI.keep.includes('gpt-6.2-sol'));
 });
 
 test('GPT-6 targets look like conversations the UI creates from the preset', () => {
   // Quick stays below the 272K tier where GPT-6 prices double; Standard goes
   // past it on purpose (John, 2026-10-19).
-  [['gpt-6-luna', 'quick', 250000], ['gpt-6.1-sol', 'standard', 400000]].forEach(([name, spec, max]) => {
+  [['gpt-6-luna', 'quick', 250000], ['gpt-6.2-sol', 'standard', 400000]].forEach(([name, spec, max]) => {
     const target = MAP.targets[name];
     assert.strictEqual(target.endpoint, 'openAI');
     assert.strictEqual(target.endpointType, null, 'built-in conversations have no endpointType');
@@ -139,10 +145,10 @@ test('a target without endpoint or model does not parse', () => {
 test('an old openAI conversation moves to GPT-6 with the full field set', () => {
   const plan = planConversation(oldOpenAI(), MAP);
   assert.strictEqual(plan.action, 'move');
-  assert.strictEqual(plan.target, 'gpt-6.1-sol');
+  assert.strictEqual(plan.target, 'gpt-6.2-sol');
   // The endpoint is already openAI, so it is not rewritten.
   assert.deepStrictEqual(plan.set, {
-    model: 'gpt-6.1-sol',
+    model: 'gpt-6.2-sol',
     spec: 'standard',
     reasoning_effort: 'medium',
     useResponsesApi: true,
@@ -266,7 +272,7 @@ test('a revert restores old values, removes added fields, and is guarded by the 
   const plan = planConversation(convo, MAP);
   const entry = JSON.parse(JSON.stringify(plan)); // as read back from the audit file
   const { filter, update } = revertFor(entry);
-  assert.deepStrictEqual(filter, { conversationId: 'c-1', endpoint: 'openAI', model: 'gpt-6.1-sol' });
+  assert.deepStrictEqual(filter, { conversationId: 'c-1', endpoint: 'openAI', model: 'gpt-6.2-sol' });
   assert.strictEqual(update.$set.model, 'gpt-5.4');
   assert.deepStrictEqual(Object.keys(update.$unset).sort(), [
     'maxContextTokens',
@@ -287,7 +293,7 @@ test('summarize counts moves per route and recent use', () => {
   convos.forEach((c) => (byId[c.conversationId] = c));
   const s = summarize(convos.map((c) => planConversation(c, MAP)), byId, new Date(now - 30 * 86400000));
   assert.deepStrictEqual(s.counts, { ignore: 0, keep: 1, move: 2 });
-  assert.deepStrictEqual(s.routes['openAI / gpt-5.4 -> gpt-6.1-sol'], { count: 2, recent: 1 });
+  assert.deepStrictEqual(s.routes['openAI / gpt-5.4 -> gpt-6.2-sol'], { count: 2, recent: 1 });
 });
 
 /* ------------------------------------------------------------------------- */
@@ -299,12 +305,12 @@ test('a saved preset moves like a conversation, keyed by presetId', () => {
   const plan = planConversation(preset, MAP, { idField: 'presetId' });
   assert.strictEqual(plan.action, 'move');
   assert.strictEqual(plan.conversationId, 'p-1');
-  assert.strictEqual(plan.set.model, 'gpt-6.1-sol');
+  assert.strictEqual(plan.set.model, 'gpt-6.2-sol');
   assert.strictEqual(plan.set.spec, 'standard');
   const { filter } = updateFor(plan);
   assert.deepStrictEqual(filter, { presetId: 'p-1', endpoint: CUSTOM, model: 'gpt-5.6-terra' });
   const revert = revertFor(JSON.parse(JSON.stringify(plan)));
-  assert.deepStrictEqual(revert.filter, { presetId: 'p-1', endpoint: 'openAI', model: 'gpt-6.1-sol' });
+  assert.deepStrictEqual(revert.filter, { presetId: 'p-1', endpoint: 'openAI', model: 'gpt-6.2-sol' });
 });
 
 /* ------------------------------------------------------------------------- */
@@ -325,7 +331,7 @@ test('favorites on retired models and specs move; agent favorites stay', () => {
   assert.strictEqual(plan.changed, true);
   assert.deepStrictEqual(plan.next, [
     { agentId: 'agent_a' },
-    { endpoint: 'openAI', model: 'gpt-6.1-sol' },
+    { endpoint: 'openAI', model: 'gpt-6.2-sol' },
     { endpoint: 'anthropic', model: 'claude-sonnet-5-5' },
     { spec: 'standard' },
   ]);
