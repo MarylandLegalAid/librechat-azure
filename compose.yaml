@@ -96,7 +96,7 @@ services:
   # being offered upgrades. If Renovate goes quiet for longer than upstream's
   # release cadence, check the image path before assuming there is nothing new.
   api:
-    image: ghcr.io/librechat-ai/librechat:v0.8.8
+    image: ghcr.io/librechat-ai/librechat:v0.8.9
     container_name: LibreChat
     restart: unless-stopped
     logging: *default-logging
@@ -182,7 +182,7 @@ services:
   # effect of any unrelated commit. Renovate proposes digest bumps as pull
   # requests.
   admin-panel:
-    image: registry.librechat.ai/clickhouse/librechat-admin-panel:latest@sha256:a395465d1daa3c11495810a8c224df86675985d50de42e98e36eeedbd8aecb94
+    image: registry.librechat.ai/librechat-ai/librechat-admin-panel:latest@sha256:685969b1bfbe307f84a750a8c0602cf87380d2573120757739a54be2d05beed9
     container_name: admin-panel
     restart: unless-stopped
     logging: *default-logging

@@ -28,7 +28,7 @@
         "caddy",
         "pgvector/pgvector",
         "registry.librechat.ai/librechat-ai/librechat-rag-api-dev-lite",
-        "registry.librechat.ai/clickhouse/librechat-admin-panel"
+        "registry.librechat.ai/librechat-ai/librechat-admin-panel"
       ],
       "groupName": "supporting services",
       "automerge": false
