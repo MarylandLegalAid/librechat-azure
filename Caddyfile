@@ -161,3 +161,9 @@
 		}
 	}
 }
+
+# --- Optional sites ----------------------------------------------------------
+# Overlays mount extra site files here (compose.previews.yml mounts
+# caddy/sites/). With no overlay the directory does not exist and the glob
+# imports nothing.
+import /etc/caddy/sites/*.caddy

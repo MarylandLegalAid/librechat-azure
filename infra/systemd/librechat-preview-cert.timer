@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily check of the Sandpack preview certificate
+
+[Timer]
+# lego renews only when a third of the lifetime is left, so a daily run is
+# mostly a no-op; it exists so a failed renewal is retried every day.
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
