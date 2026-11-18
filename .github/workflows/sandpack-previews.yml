@@ -1,0 +1,84 @@
+name: Build Sandpack previews image
+
+# Self-hosted Sandpack bundlers (images/sandpack-previews). Runs when that
+# directory changes on any branch, or by hand. Publishes an immutable tag:
+# bump PREVIEWS_IMAGE's -rN suffix with every change, and pin the new digest in
+# compose.previews.yml. An existing tag is never overwritten.
+
+on:
+  push:
+    paths:
+      - images/sandpack-previews/**
+      - .github/workflows/sandpack-previews.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: sandpack-previews
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PREVIEWS_IMAGE: ghcr.io/marylandlegalaid/sandpack-previews:sbs-ce0f225-bundler-v12-r1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse to overwrite a published tag
+        id: exists
+        run: |
+          if docker manifest inspect "$PREVIEWS_IMAGE" >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "$PREVIEWS_IMAGE is already published; bump the -rN suffix to publish a change." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build
+        if: steps.exists.outputs.already == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: images/sandpack-previews
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.PREVIEWS_IMAGE }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify the built image
+        if: steps.exists.outputs.already == 'false'
+        run: |
+          set -euo pipefail
+          docker run -d --name spv -p 18080:8080 -p 18081:8081 "$PREVIEWS_IMAGE"
+          sleep 2
+          curl -fsS http://127.0.0.1:18080/ | grep -q '<title>Preview</title>'
+          curl -fsS -o /dev/null http://127.0.0.1:18080/__csb_relay/
+          curl -fsS -o /dev/null http://127.0.0.1:18081/
+          test "$(docker exec spv id -u)" != 0
+          # The static server must not reference any external host.
+          ! docker exec spv sh -c 'grep -rhoE "https?://[a-zA-Z0-9.-]+" /srv/static' | grep -v 'www.w3.org'
+          docker rm -f spv
+      - name: Scan
+        if: steps.exists.outputs.already == 'false'
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: ${{ env.PREVIEWS_IMAGE }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+      - name: Publish
+        if: steps.exists.outputs.already == 'false'
+        run: |
+          set -euo pipefail
+          docker push "$PREVIEWS_IMAGE" | tee publish.txt
+          cat publish.txt >> "$GITHUB_STEP_SUMMARY"
