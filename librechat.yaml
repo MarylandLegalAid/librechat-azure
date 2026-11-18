@@ -218,6 +218,19 @@ registration:
   # and creates accounts through Entra ID single sign-on instead. Either approach
   # closes the hole; doing neither does not.
 
+# Settings > Account can change a user's registered email (new in v0.8.9, on
+# unless switched off). Off here: identity comes from the SSO provider, and the
+# email is what ties a LibreChat account to its SSO identity, so a user should
+# not be able to change it locally. The rate limits under `rateLimits` then
+# never apply. Grantees using local accounts only may want it on.
+emailChange:
+  enabled: false
+
+# Stored credentials (users' MCP and plugin keys) are written in the v3 format,
+# v0.8.9's default. v0.8.8 cannot read v3, so after a rollback to v0.8.8 users
+# re-enter credentials saved since the upgrade (Maryland Legal Aid's choice,
+# 2026-11-18). Set `credentials.writeFormat: legacy` to keep a rollback clean.
+
 # =============================================================================
 # Endpoints
 # =============================================================================
