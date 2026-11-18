@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      PREVIEWS_IMAGE: ghcr.io/marylandlegalaid/sandpack-previews:sbs-ce0f225-bundler-v12-r1
+      PREVIEWS_IMAGE: ghcr.io/marylandlegalaid/sandpack-previews:sbs-ce0f225-bundler-v12-r2
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -62,7 +62,8 @@ jobs:
           docker run -d --name spv -p 18080:8080 -p 18081:8081 "$PREVIEWS_IMAGE"
           sleep 2
           curl -fsS http://127.0.0.1:18080/ | grep -q '<title>Preview</title>'
-          curl -fsS -o /dev/null http://127.0.0.1:18080/__csb_relay/
+          # The relay page itself, not the bootstrap fallback (r1 served the wrong page).
+          curl -fsS http://127.0.0.1:18080/__csb_relay/ | grep -q '__csb_relay\.'
           curl -fsS -o /dev/null http://127.0.0.1:18081/
           test "$(docker exec spv id -u)" != 0
           # The static server must not reference any external host.
