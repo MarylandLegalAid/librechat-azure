@@ -25,7 +25,7 @@
 
 services:
   previews:
-    image: ghcr.io/marylandlegalaid/sandpack-previews:sbs-ce0f225-bundler-v12-r1@sha256:aed426e55f37c297003b7adf67c803cd3b00acac8e499a8b4758f25d27114b54
+    image: ghcr.io/marylandlegalaid/sandpack-previews:sbs-ce0f225-bundler-v12-r2@sha256:5b369b6de7d152c0694eab81bf92ca387620cb0c4231b75589189aed056eeaf1
     container_name: sandpack-previews
     restart: unless-stopped
     logging:
