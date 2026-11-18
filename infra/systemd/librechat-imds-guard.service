@@ -1,0 +1,18 @@
+[Unit]
+Description=Block containers from the Azure instance metadata endpoint
+Documentation=file:///srv/librechat/app/scripts/container-imds-guard.sh
+# Docker creates the DOCKER-USER chain when it starts. PartOf makes a restart
+# of Docker re-run this unit, so the rule is back before containers serve.
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/srv/librechat/app/scripts/container-imds-guard.sh --apply
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=docker.service
