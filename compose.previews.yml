@@ -1,5 +1,5 @@
 # =============================================================================
-# Self-hosted Sandpack previews (UPGRADE_PLAN Round 2, gate D16)
+# Self-hosted Sandpack previews (UPGRADE_PLAN Round 2, gate D19)
 # =============================================================================
 # Added by deploy.sh ONLY when PREVIEW_DOMAIN is set (Key Vault secret
 # PREVIEW-DOMAIN) and a certificate for it exists. Without it nothing here runs
