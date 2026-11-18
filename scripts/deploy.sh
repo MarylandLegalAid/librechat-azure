@@ -172,6 +172,24 @@ fi
 # as a Compose or application configuration change.
 "$REPO_ROOT/scripts/install-host-maintenance.sh"
 
+# Containers must not reach the instance metadata endpoint, which would give
+# them the VM's identity (every vault secret, the backup storage account). See
+# scripts/container-imds-guard.sh. Checked before anything starts: a stack
+# without the rule is not started at all.
+if ! "$REPO_ROOT/scripts/install-imds-guard.sh"; then
+  fail "the container metadata-endpoint block is not in place — not deploying."
+  fail "See 'journalctl -u librechat-imds-guard' and scripts/container-imds-guard.sh."
+  # Put the checkout back, or the next run would see no change and never
+  # retry this commit. Nothing has been restarted yet. After a re-exec the
+  # previous commit is already this one, so there is nothing to put back.
+  git reset --quiet --hard "$PREVIOUS_SHA"
+  if [ "$CURRENT_SHA" = "$PREVIOUS_SHA" ]; then
+    fail "The timer will not retry this commit by itself: fix the rule, then"
+    fail "run 'sudo scripts/deploy.sh --force'."
+  fi
+  exit 1
+fi
+
 
 # -----------------------------------------------------------------------------
 # Helpers used by the deploy and by the rollback.
