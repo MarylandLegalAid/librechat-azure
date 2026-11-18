@@ -6,7 +6,7 @@
 # Markdown, SVG) inside Sandpack iframes. By default those iframes are served
 # by CodeSandbox's public hosts, so the previewed content is handed to a page
 # running a third party's code. This image serves both bundlers from our own
-# preview domain instead (UPGRADE_PLAN Round 2, gate D16).
+# preview domain instead (UPGRADE_PLAN Round 2, gate D19).
 #
 #   /srv/static   static template server: CSV/Office/HTML/Markdown/SVG/code
 #                 previews and non-React Artifacts (SANDPACK_STATIC_BUNDLER_URL).

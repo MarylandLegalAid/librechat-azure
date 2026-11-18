@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Obtain or renew the wildcard certificate for the self-hosted Sandpack
-# previews (compose.previews.yml, UPGRADE_PLAN Round 2 gate D16).
+# previews (compose.previews.yml, UPGRADE_PLAN Round 2 gate D19).
 #
 #   preview-cert.sh             get or renew; reload Caddy if the cert changed
 #   preview-cert.sh --no-reload get or renew only (deploy.sh, before starting)
