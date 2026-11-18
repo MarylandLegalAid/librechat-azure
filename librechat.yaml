@@ -31,7 +31,7 @@
 # changelog. When you upgrade LibreChat, diff the new release's own
 # librechat.example.yaml against this file; renamed and removed keys are the most
 # common upgrade break and prose changelogs miss them.
-version: 1.3.17
+version: 1.3.19
 
 # Caches the parsed config for faster loading across the app lifecycle.
 cache: true

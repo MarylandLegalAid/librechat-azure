@@ -389,7 +389,7 @@ fi
 # packages/data-provider (`prefersResponsesApiByModel`). Re-check the pattern at
 # every LibreChat upgrade. GPT-5.6 would reach Chat Completions here and fail on
 # reasoning plus tools at request time, so OPENAI_MODELS is GPT-6 only.
-GPT6_TIER='^gpt-6(\.[0-9]+)?-(astra|sol|luna)(-|$)'
+GPT6_TIER='^gpt-6(\.[0-9]+)?-(astra|sol|terra|luna)(-|$)'
 openai_models="$(grep '^OPENAI_MODELS=' env.defaults | cut -d= -f2-)"
 if [ -z "$openai_models" ]; then
   # Unset or empty while OPENAI_API_KEY is set = OpenAI's whole catalog.
