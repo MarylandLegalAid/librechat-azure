@@ -85,6 +85,16 @@
     }
   ],
 
+  "customManagers": [
+    {
+      "description": "The lego ACME client pinned in scripts/preview-cert.sh (it runs as a one-shot container, so no Compose file names it).",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts/preview-cert\\.sh$/"],
+      "matchStrings": ["LEGO_IMAGE=\"(?<depName>goacme/lego):(?<currentValue>v[0-9.]+)@(?<currentDigest>sha256:[a-f0-9]{64})\""],
+      "datasourceTemplate": "docker"
+    }
+  ],
+
   "vulnerabilityAlerts": {
     "labels": ["security"],
     "schedule": ["at any time"]

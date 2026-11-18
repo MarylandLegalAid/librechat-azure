@@ -1,0 +1,58 @@
+# =============================================================================
+# Self-hosted Sandpack previews (UPGRADE_PLAN Round 2, gate D16)
+# =============================================================================
+# Added by deploy.sh ONLY when PREVIEW_DOMAIN is set (Key Vault secret
+# PREVIEW-DOMAIN) and a certificate for it exists. Without it nothing here runs
+# and LibreChat falls back to CodeSandbox's public bundlers.
+#
+# Why: LibreChat renders Artifacts and code-output file previews (CSV, Office,
+# HTML, Markdown, SVG) in Sandpack iframes. CodeSandbox's hosts would receive
+# that content into a page running their code. This serves the bundlers from
+# our own domain instead. See images/sandpack-previews/Dockerfile.
+#
+# PREVIEW_DOMAIN must be a zone of its own, on a domain unrelated to the chat
+# domain: previews run model-written code, and anything under the chat
+# domain's registrable domain would count as the same site as the chat app.
+#
+#   preview.<PREVIEW_DOMAIN>   static template base; each preview is served at
+#                              <random id>-preview.<PREVIEW_DOMAIN>
+#   bundler.<PREVIEW_DOMAIN>   React bundler
+#
+# TLS: a wildcard certificate obtained on the host by scripts/preview-cert.sh
+# (DNS-01 with the VM's managed identity, rights on this zone only), mounted
+# read-only into Caddy. Caddy does no ACME for these names.
+# =============================================================================
+
+services:
+  previews:
+    image: ghcr.io/marylandlegalaid/sandpack-previews:sbs-ce0f225-bundler-v12-r1@sha256:aed426e55f37c297003b7adf67c803cd3b00acac8e499a8b4758f25d27114b54
+    container_name: sandpack-previews
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # Static files only: nothing to write but nginx's temp and pid files.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    environment:
+      SANDPACK_BUNDLER_URL: https://bundler.${PREVIEW_DOMAIN}
+      SANDPACK_STATIC_BUNDLER_URL: https://preview.${PREVIEW_DOMAIN}
+
+  caddy:
+    environment:
+      PREVIEW_DOMAIN: ${PREVIEW_DOMAIN}
+    volumes:
+      # A directory, not a single file, so updates are seen (see Caddyfile).
+      - ./caddy/sites:/etc/caddy/sites:ro
+      - ${DATA_DIR}/preview-tls/certificates:/etc/caddy/preview-tls:ro
+    depends_on:
+      - previews

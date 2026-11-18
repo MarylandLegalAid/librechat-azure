@@ -1,0 +1,13 @@
+[Unit]
+Description=Renew the Sandpack preview wildcard certificate
+Documentation=file:///srv/librechat/app/scripts/preview-cert.sh
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/srv/librechat/app/scripts/preview-cert.sh
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal

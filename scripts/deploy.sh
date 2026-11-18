@@ -321,6 +321,23 @@ bring_up_stack() {
     return 1
   fi
   [ -z "$security_overlay" ] || compose_args+=(-f "$security_overlay")
+
+  # Self-hosted Sandpack previews (compose.previews.yml). On only when
+  # PREVIEW_DOMAIN is set AND a usable certificate exists: Caddy refuses to
+  # start with a missing certificate file, and that would take the chat site
+  # down with it. So a certificate problem turns previews off for this deploy
+  # (LibreChat then uses CodeSandbox's public bundlers) and says so loudly.
+  if [ -n "$(env_value PREVIEW_DOMAIN)" ]; then
+    if "$REPO_ROOT/scripts/preview-cert.sh" --no-reload; then
+      log "self-hosted previews: on"
+      compose_args+=(-f compose.previews.yml)
+    else
+      fail "no usable preview certificate: self-hosted previews are OFF for this"
+      fail "deploy, and previews fall back to CodeSandbox. See"
+      fail "'journalctl -u librechat-preview-cert' and scripts/preview-cert.sh."
+    fi
+  fi
+
   if [ "${#profiles[@]}" -gt 0 ]; then
     log "optional services: ${profiles[*]}"
     for profile in "${profiles[@]}"; do
@@ -339,7 +356,9 @@ bring_up_stack() {
   # file is a single-file bind mount, pinned by inode, and the checkout replaces
   # it with a new one. Computed here, after any rollback reset, so it always
   # describes the file this run is deploying.
-  CADDYFILE_SHA256="$(sha256sum Caddyfile | cut -d' ' -f1)"
+  # The optional site files (caddy/sites/) count too: Caddy reads them only
+  # at start, so a changed one also needs a recreate.
+  CADDYFILE_SHA256="$(cat Caddyfile caddy/sites/*.caddy 2>/dev/null | sha256sum | cut -d' ' -f1)"
   export CADDYFILE_SHA256
 
   # Which container is serving the app right now, so we can tell afterwards

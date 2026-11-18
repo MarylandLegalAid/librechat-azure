@@ -1,0 +1,40 @@
+# Self-hosted Sandpack previews (compose.previews.yml). Imported by the
+# Caddyfile only when compose.previews.yml mounts this directory, which
+# deploy.sh does only when PREVIEW_DOMAIN is set.
+#
+# The certificate is a wildcard from scripts/preview-cert.sh, read from disk:
+# Caddy does no ACME for these names.
+
+(preview_site) {
+	tls /etc/caddy/preview-tls/_.{$PREVIEW_DOMAIN}.crt /etc/caddy/preview-tls/_.{$PREVIEW_DOMAIN}.key
+
+	header {
+		# Only the chat app may frame a preview, so no other site can load our
+		# preview origin inside its own page.
+		Content-Security-Policy "frame-ancestors https://{$CHAT_DOMAIN}"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	encode zstd gzip
+
+	log {
+		output file /data/log/preview-access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+# React bundler. An exact name wins over the wildcard below.
+bundler.{$PREVIEW_DOMAIN} {
+	import preview_site
+	reverse_proxy previews:8081
+}
+
+# Static template server: <id>-preview.<domain>, one origin per preview.
+*.{$PREVIEW_DOMAIN} {
+	import preview_site
+	reverse_proxy previews:8080
+}
