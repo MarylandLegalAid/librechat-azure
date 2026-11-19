@@ -55,14 +55,19 @@
     "",
     "2026-11-17 (UPGRADE_PLAN Round 2, gate D2): GPT-6.2 Sol replaces GPT-6.1 Sol",
     "(same price, window and limits). Conversations on gpt-6.1-sol move to the",
-    "Standard target, and every row that went to 6.1 Sol now goes to 6.2 Sol."
+    "Standard target, and every row that went to 6.1 Sol now goes to 6.2 Sol.",
+    "",
+    "2026-11-19 (UPGRADE_PLAN Phase F, D15): Quick moves to GPT-6.1 Terra. The",
+    "gpt-6-luna target clears its spec (null = unset): Luna stays on the raw selector",
+    "but is no longer the Quick preset. It keeps Quick's old low effort and 250000",
+    "cap. Old Quick threads were not moved (precedent 2026-10-16)."
   ],
   "targets": {
     "gpt-6-luna": {
       "endpoint": "openAI",
       "endpointType": null,
       "model": "gpt-6-luna",
-      "spec": "quick",
+      "spec": null,
       "reasoning_effort": "low",
       "useResponsesApi": true,
       "maxContextTokens": 250000
