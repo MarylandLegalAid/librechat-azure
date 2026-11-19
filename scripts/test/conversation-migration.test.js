@@ -92,8 +92,9 @@ test('GPT-6.1 Sol conversations move to 6.2 Sol, and 6.1 is no longer kept (Roun
 
 test('GPT-6 targets look like conversations the UI creates from the preset', () => {
   // Quick stays below the 272K tier where GPT-6 prices double; Standard goes
-  // past it on purpose (John, 2026-10-19).
-  [['gpt-6-luna', 'quick', 250000], ['gpt-6.2-sol', 'standard', 400000]].forEach(([name, spec, max]) => {
+  // past it on purpose (John, 2026-10-19). Since 2026-11-19 Quick is GPT-6.1
+  // Terra, so Luna is a raw-selector model: its target clears the spec.
+  [['gpt-6-luna', null, 250000], ['gpt-6.2-sol', 'standard', 400000]].forEach(([name, spec, max]) => {
     const target = MAP.targets[name];
     assert.strictEqual(target.endpoint, 'openAI');
     assert.strictEqual(target.endpointType, null, 'built-in conversations have no endpointType');
@@ -170,11 +171,11 @@ test('a conversation on the retired custom endpoint moves to the built-in one', 
   assert.deepStrictEqual(plan.set, {
     endpoint: 'openAI',
     model: 'gpt-6-luna',
-    spec: 'quick',
     reasoning_effort: 'low',
     maxContextTokens: 250000,
   });
-  assert.deepStrictEqual(plan.unset, ['endpointType']);
+  // The retired spec goes: Luna is no longer the Quick preset (2026-11-19).
+  assert.deepStrictEqual(plan.unset.sort(), ['endpointType', 'spec']);
 });
 
 test('a stored useResponsesApi: false is cleared (M14)', () => {

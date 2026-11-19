@@ -99,7 +99,7 @@ interface:
   # billed at 2x ($8/M on Opus 5.5, not $5), so Claude threads read 15-30% low
   # (a Complex thread showed $0.048 for $0.061). gpt-6.2-sol (like 6.1) is priced
   # as gpt-6-sol, so its cache reads count double ($0.20/M, not $0.10/M); GPT-6
-  # Luna is exact. Built-in endpoints take no price overrides (tokenConfig is
+  # Luna and GPT-6.1 Terra (v0.8.9 has its own entry) are exact. Built-in endpoints take no price overrides (tokenConfig is
   # custom-endpoint only). Revisit after an upstream release prices the TTL.
   contextCost: true
   # "Run Code" button on Markdown code blocks — executes via the self-hosted
@@ -410,7 +410,10 @@ modelSpecs:
       artifacts: true
       preset:
         endpoint: "openAI"
-        model: "gpt-6-luna"
+        # GPT-6.1 Terra ($1/$5) since 2026-11-19 (John, decision D2; ZDR
+        # confirmed). Was gpt-6-luna. Old Quick threads keep the model they
+        # were started on.
+        model: "gpt-6.1-terra"
         reasoning_effort: "low"
         useResponsesApi: true
         maxContextTokens: 250000

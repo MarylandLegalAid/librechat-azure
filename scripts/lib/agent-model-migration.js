@@ -23,6 +23,7 @@ const APPROVED_MODELS = [
   'claude-sonnet-5-5',
   'claude-haiku-4-5', // not 5.5 yet: env.defaults says why
   'gpt-6.2-sol',
+  'gpt-6.1-terra',
   'gpt-6-luna',
 ];
 
