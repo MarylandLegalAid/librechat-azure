@@ -112,8 +112,9 @@ test('Terra conversations stay where they are, on either OpenAI endpoint', () =>
 test('GPT-6 targets look like conversations the UI creates from the preset', () => {
   // Quick stays below the 272K tier where GPT-6 prices double; Standard goes
   // past it on purpose (John, 2026-10-19). Since 2026-11-19 Quick is GPT-6.1
-  // Terra, so Luna is a raw-selector model: its target clears the spec.
-  [['gpt-6-luna', null, 250000], ['gpt-6.2-sol', 'standard', 400000]].forEach(([name, spec, max]) => {
+  // Terra, so Luna is a raw-selector model: its target clears the spec. Since
+  // 2026-11-24 Sol is Complex (at high), so Sol's target clears it too.
+  [['gpt-6-luna', null, 250000], ['gpt-6.2-sol', null, 400000]].forEach(([name, spec, max]) => {
     const target = MAP.targets[name];
     assert.strictEqual(target.endpoint, 'openAI');
     assert.strictEqual(target.endpointType, null, 'built-in conversations have no endpointType');
@@ -169,7 +170,6 @@ test('an old openAI conversation moves to GPT-6 with the full field set', () => 
   // The endpoint is already openAI, so it is not rewritten.
   assert.deepStrictEqual(plan.set, {
     model: 'gpt-6.2-sol',
-    spec: 'standard',
     reasoning_effort: 'medium',
     useResponsesApi: true,
     maxContextTokens: 400000,
@@ -217,7 +217,7 @@ test('before-values record absent fields distinctly, so a revert removes them', 
   const convo = oldOpenAI();
   delete convo.maxContextTokens;
   const plan = planConversation(convo, MAP);
-  assert.deepStrictEqual(plan.before.spec, ABSENT);
+  assert.deepStrictEqual(plan.before.reasoning_effort, ABSENT);
   assert.deepStrictEqual(plan.before.maxContextTokens, ABSENT);
   assert.strictEqual(plan.before.model, 'gpt-5.4');
 });
@@ -297,7 +297,6 @@ test('a revert restores old values, removes added fields, and is guarded by the 
   assert.deepStrictEqual(Object.keys(update.$unset).sort(), [
     'maxContextTokens',
     'reasoning_effort',
-    'spec',
     'useResponsesApi',
   ]);
 });
@@ -326,7 +325,8 @@ test('a saved preset moves like a conversation, keyed by presetId', () => {
   assert.strictEqual(plan.action, 'move');
   assert.strictEqual(plan.conversationId, 'p-1');
   assert.strictEqual(plan.set.model, 'gpt-6.2-sol');
-  assert.strictEqual(plan.set.spec, 'standard');
+  // The retired spec goes: Sol's target names no preset (2026-11-24).
+  assert.ok(plan.unset.includes('spec'));
   const { filter } = updateFor(plan);
   assert.deepStrictEqual(filter, { presetId: 'p-1', endpoint: CUSTOM, model: 'gpt-5.6-terra' });
   const revert = revertFor(JSON.parse(JSON.stringify(plan)));
