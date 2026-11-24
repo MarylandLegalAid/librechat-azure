@@ -323,7 +323,13 @@ endpoints:
         default:
           - "gpt-5.6-luna"
           - "gpt-5.6-terra"
-          - "gpt-5.6-sol"
+          # gpt-6.1-terra replaces gpt-5.6-sol (John, 2026-11-24): the only
+          # conversation left on this endpoint is one long thread that cost $54
+          # in November on 5.6 Sol. Its stored model was moved to Terra in the
+          # DB (record: /srv/librechat/data/migrations/responses-endpoint-to-
+          # terra-2026-11-24T14-35-38Z.json). Check back later that the thread
+          # is no longer in use, then do step B.
+          - "gpt-6.1-terra"
         fetch: false
       # titleConvo MUST stay true. It was false until 2026-07-30, copied from the
       # Render config where it was harmless because no agent pointed at this
