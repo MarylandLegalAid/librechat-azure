@@ -60,7 +60,12 @@
     "2026-11-19 (UPGRADE_PLAN Phase F, D15): Quick moves to GPT-6.1 Terra. The",
     "gpt-6-luna target clears its spec (null = unset): Luna stays on the raw selector",
     "but is no longer the Quick preset. It keeps Quick's old low effort and 250000",
-    "cap. Old Quick threads were not moved (precedent 2026-10-16)."
+    "cap. Old Quick threads were not moved (precedent 2026-10-16).",
+    "",
+    "2026-11-24 (UPGRADE_PLAN Round 2, gate D14): claude-haiku-5-5 replaces",
+    "claude-haiku-4-5. gpt-6.1-terra is kept on the built-in endpoint (offered since",
+    "2026-11-19) and on the retired custom one, whose last thread was put on Terra by",
+    "hand on 2026-11-24; a model in neither keep nor map stops the whole run."
   ],
   "targets": {
     "gpt-6-luna": {
@@ -88,11 +93,17 @@
     "claude-sonnet-5-5": {
       "endpoint": "anthropic",
       "model": "claude-sonnet-5-5"
+    },
+    "claude-haiku-5-5": {
+      "endpoint": "anthropic",
+      "model": "claude-haiku-5-5"
     }
   },
   "sources": {
     "OpenAI GPT-5.6 Responses": {
-      "keep": [],
+      "keep": [
+        "gpt-6.1-terra"
+      ],
       "map": {
         "gpt-5.6-luna": "gpt-6-luna",
         "gpt-5.6-terra": "gpt-6.2-sol",
@@ -102,6 +113,7 @@
     "openAI": {
       "keep": [
         "gpt-6-luna",
+        "gpt-6.1-terra",
         "gpt-6.2-sol"
       ],
       "map": {
@@ -123,9 +135,10 @@
       "keep": [
         "claude-opus-5-5",
         "claude-sonnet-5-5",
-        "claude-haiku-4-5"
+        "claude-haiku-5-5"
       ],
       "map": {
+        "claude-haiku-4-5": "claude-haiku-5-5",
         "claude-opus-4-8": "claude-opus-5-5",
         "claude-opus-5": "claude-opus-5-5",
         "claude-opus-4-7": "claude-opus-5-5",
