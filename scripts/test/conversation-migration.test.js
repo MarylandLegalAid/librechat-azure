@@ -90,6 +90,25 @@ test('GPT-6.1 Sol conversations move to 6.2 Sol, and 6.1 is no longer kept (Roun
   assert.ok(MAP.sources.openAI.keep.includes('gpt-6.2-sol'));
 });
 
+test('Haiku 4.5 conversations move to 5.5, changing only the model (Round 2, D14)', () => {
+  const convo = { conversationId: 'c', endpoint: 'anthropic', model: 'claude-haiku-4-5', maxContextTokens: 129200 };
+  const plan = planConversation(convo, MAP);
+  assert.strictEqual(plan.action, 'move');
+  assert.deepStrictEqual(plan.set, { model: 'claude-haiku-5-5' });
+  assert.deepStrictEqual(plan.unset, []);
+  assert.strictEqual(
+    planConversation(Object.assign(convo, plan.set), MAP).action, 'keep');
+});
+
+test('Terra conversations stay where they are, on either OpenAI endpoint', () => {
+  // Prod, 2026-11-24: two on the built-in endpoint, one on the retired custom one.
+  // Unlisted, any of them would stop the whole run.
+  [CUSTOM, 'openAI'].forEach((endpoint) => {
+    const plan = planConversation({ conversationId: 'c', endpoint, model: 'gpt-6.1-terra' }, MAP);
+    assert.strictEqual(plan.action, 'keep');
+  });
+});
+
 test('GPT-6 targets look like conversations the UI creates from the preset', () => {
   // Quick stays below the 272K tier where GPT-6 prices double; Standard goes
   // past it on purpose (John, 2026-10-19). Since 2026-11-19 Quick is GPT-6.1
